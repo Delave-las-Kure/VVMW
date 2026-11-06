@@ -1,5 +1,6 @@
 using UdonSharp;
 using UnityEngine;
+using VRC.SDKBase;
 
 namespace JLChnToZ.VRC.VVMW {
     // A dedicated VizVid output gain, never AudioSource.enabled/mute or Core.Volume.
@@ -7,8 +8,8 @@ namespace JLChnToZ.VRC.VVMW {
     public class SourceMirrorOutputGate : AbstractAudioController {
         public bool Held { get; private set; }
         float savedGain;
-        public bool IsWired => VRC.SDKBase.Utilities.IsValid(audioSource) &&
-            VRC.SDKBase.Utilities.IsValid(core) && enabled && gameObject.activeInHierarchy;
+        public bool IsWired => Utilities.IsValid(audioSource) &&
+            Utilities.IsValid(core) && enabled && gameObject.activeInHierarchy;
         public void Hold() {
             if (!IsWired || Held) return;
             savedGain = Volume;
