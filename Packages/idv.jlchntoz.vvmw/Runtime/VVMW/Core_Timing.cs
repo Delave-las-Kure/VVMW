@@ -211,7 +211,7 @@ namespace JLChnToZ.VRC.VVMW {
             var duration = activeHandler.Duration;
             if (duration <= 0 || float.IsInfinity(duration)) return 0;
             var videoTime = Mathf.Repeat(activeHandler.Time, duration);
-            double syncTime = videoTime / actualSpeed - syncOffset + PerformerLatency;
+            double syncTime = activeHandler.IsPlaying ? videoTime / actualSpeed - syncOffset + PerformerLatency : videoTime;
             if (activeHandler.IsPlaying) {
                 long serverTimeMs = Networking.GetServerTimeInMilliseconds() - (long)(syncTime * 1000);
                 if (serverTimeMs > int.MaxValue) serverTimeMs -= uint.MaxValue;
