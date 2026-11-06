@@ -48,6 +48,48 @@ namespace JLChnToZ.VRC.VVMW {
         bool afterFirstRun;
         float playbackSpeed = 1, actualPlaybackSpeed = 1;
         VRCUrl loadedUrl;
+        VRCUrl localCanonicalUrlForUfc, localPhysicalUrlForUfc, loadedPhysicalUrlForUfc;
+        bool localLoadPendingForUfc, localLoadIssuedForUfc, nativeLoadPresentForUfc;
+        int localLoadGenerationForUfc, issuedLoadGenerationForUfc;
+
+        public VRCUrl LoadedPhysicalUrlForUfc => loadedPhysicalUrlForUfc;
+        public bool HasLocalTransportUrlForUfc(VRCUrl canonicalUrl) => !VRCUrl.IsNullOrEmpty(canonicalUrl) &&
+            !VRCUrl.IsNullOrEmpty(localPhysicalUrlForUfc) && canonicalUrl.Equals(localCanonicalUrlForUfc);
+
+        public void SetPreferredTransportUrlForUfc(VRCUrl canonicalUrl, VRCUrl physicalUrl) {
+            if (VRCUrl.IsNullOrEmpty(physicalUrl) || (!VRCUrl.IsNullOrEmpty(canonicalUrl) && canonicalUrl.Equals(physicalUrl))) {
+                localCanonicalUrlForUfc = localPhysicalUrlForUfc = null;
+            } else { localCanonicalUrlForUfc = canonicalUrl; localPhysicalUrlForUfc = physicalUrl; }
+        }
+
+        public void PrepareLocalTransportLoadForUfc(int generation) {
+            localLoadGenerationForUfc = generation;
+            localLoadPendingForUfc = true;
+            localLoadIssuedForUfc = false;
+            isReady = false;
+            loadedUrl = null; // Late old Ready cannot satisfy a queued replacement.
+        }
+
+        public void RetagLocalTransportLoadForUfc(int oldGeneration, int generation) {
+            if (!localLoadPendingForUfc || localLoadGenerationForUfc != oldGeneration) return;
+            localLoadGenerationForUfc = generation;
+            if (issuedLoadGenerationForUfc == oldGeneration) issuedLoadGenerationForUfc = generation;
+        }
+
+        public void FinishLocalTransportLoadForUfc(int generation) {
+            if (localLoadGenerationForUfc != generation) return;
+            localLoadPendingForUfc = false;
+        }
+
+        public void CancelLocalTransportLoadForUfc(int generation) {
+            if (!localLoadPendingForUfc || localLoadGenerationForUfc != generation) return;
+            localLoadPendingForUfc = localLoadIssuedForUfc = false;
+            loadedUrl = null;
+            isReady = false;
+        }
+
+        bool IgnoreLocalTransportCallbackForUfc() => localLoadPendingForUfc &&
+            (!localLoadIssuedForUfc || issuedLoadGenerationForUfc != localLoadGenerationForUfc || !videoPlayer.IsReady);
 
 #if COMPILER_UDONSHARP
         public
@@ -60,6 +102,7 @@ namespace JLChnToZ.VRC.VVMW {
                 isActive = value;
                 if (!isActive) {
                     videoPlayer.Stop();
+                    nativeLoadPresentForUfc = false;
                     isReady = false;
                 }
             }
@@ -277,7 +320,10 @@ namespace JLChnToZ.VRC.VVMW {
         internal protected
 #endif
         override void LoadUrl(VRCUrl url, bool reload) {
-            if (videoPlayer.IsPlaying) videoPlayer.Stop();
+            if (videoPlayer.IsPlaying || (localLoadPendingForUfc && nativeLoadPresentForUfc)) {
+                videoPlayer.Stop();
+                nativeLoadPresentForUfc = false;
+            }
             if (!isActive) return;
             bool skip = !reload &&
                 !VRCUrl.IsNullOrEmpty(currentUrl) &&
@@ -304,7 +350,17 @@ namespace JLChnToZ.VRC.VVMW {
 #else
         protected
 #endif
-        virtual VRCUrl ResolveLocalTransportUrlForUfc(VRCUrl canonicalUrl) => canonicalUrl;
+        virtual VRCUrl ResolveLocalTransportUrlForUfc(VRCUrl canonicalUrl) =>
+            HasLocalTransportUrlForUfc(canonicalUrl) ? localPhysicalUrlForUfc : canonicalUrl;
+
+        void LoadNativeTransportForUfc() {
+            loadedUrl = currentUrl;
+            loadedPhysicalUrlForUfc = ResolveLocalTransportUrlForUfc(currentUrl);
+            issuedLoadGenerationForUfc = localLoadGenerationForUfc;
+            localLoadIssuedForUfc = true;
+            nativeLoadPresentForUfc = true;
+            videoPlayer.LoadURL(loadedPhysicalUrlForUfc);
+        }
 
         void LoadUrl() {
             isReady = false;
@@ -314,10 +370,11 @@ namespace JLChnToZ.VRC.VVMW {
                 if (delay > 0) {
                     isLoadUrlRequested = true;
                     SendCustomEventDelayedSeconds(nameof(_DoLoadUrl), delay);
-                } else {
-                    loadedUrl = currentUrl;
-                    videoPlayer.LoadURL(ResolveLocalTransportUrlForUfc(currentUrl));
-                }
+                } else if (localLoadPendingForUfc) {
+                    // One update after Stop, through the same serial executor as the rate limiter.
+                    isLoadUrlRequested = true;
+                    SendCustomEventDelayedFrames(nameof(_DoLoadUrl), 1);
+                } else LoadNativeTransportForUfc();
             }
         }
 
@@ -328,8 +385,7 @@ namespace JLChnToZ.VRC.VVMW {
             isLoadUrlRequested = false;
             if (!isActive || VRCUrl.IsNullOrEmpty(currentUrl))
                 return;
-            loadedUrl = currentUrl;
-            videoPlayer.LoadURL(ResolveLocalTransportUrlForUfc(currentUrl));
+            LoadNativeTransportForUfc();
         }
 
 #if COMPILER_UDONSHARP
@@ -362,6 +418,7 @@ namespace JLChnToZ.VRC.VVMW {
         override void Stop() {
             if (!isActive) return;
             videoPlayer.Stop();
+            nativeLoadPresentForUfc = false;
             if (isRealTimeProtocol) {
                 isRealTimeProtocol = false;
                 loadedUrl = currentUrl = VRCUrl.Empty;
@@ -371,11 +428,13 @@ namespace JLChnToZ.VRC.VVMW {
 
         public override void OnVideoError(VideoError videoError) {
             if (!isActive) return;
+            if (localLoadPendingForUfc && (!localLoadIssuedForUfc || issuedLoadGenerationForUfc != localLoadGenerationForUfc)) return;
             isReady = false;
             core.OnVideoError(videoError);
         }
 
         public override void OnVideoReady() {
+            if (IgnoreLocalTransportCallbackForUfc()) return;
             actualPlaybackSpeed = playbackSpeed;
             if (VRCUrl.IsNullOrEmpty(currentUrl) || !currentUrl.Equals(loadedUrl)) return;
             UpdatePrimaryAudioSourcePitch();
@@ -399,6 +458,7 @@ namespace JLChnToZ.VRC.VVMW {
         }
 
         public override void OnVideoStart() {
+            if (IgnoreLocalTransportCallbackForUfc()) return;
             isPaused = false;
             if (isActive) core.OnVideoStart();
             if (!isWaitingForTexture) {
@@ -413,6 +473,7 @@ namespace JLChnToZ.VRC.VVMW {
 #endif
 
         public override void OnVideoPlay() {
+            if (IgnoreLocalTransportCallbackForUfc()) return;
             isPaused = false;
             if (!isActive) return;
             BlitBufferScreen();
@@ -424,12 +485,14 @@ namespace JLChnToZ.VRC.VVMW {
 #endif
 
         public override void OnVideoPause() {
+            if (IgnoreLocalTransportCallbackForUfc()) return;
             isPaused = true;
             if (!isActive) return;
             core.OnVideoPause();
         }
 
         public override void OnVideoEnd() {
+            if (localLoadPendingForUfc) return;
             // Here are quirky behaviors of AVPro video player for firing OnVideoEnd event:
             // 1. If it's real-time protocol,
             //    it doesn't mean the stream is ended,
@@ -447,6 +510,7 @@ namespace JLChnToZ.VRC.VVMW {
         }
 
         public override void OnVideoLoop() {
+            if (localLoadPendingForUfc) return;
             isPaused = false;
             if (!isActive) return;
             core.OnVideoLoop();

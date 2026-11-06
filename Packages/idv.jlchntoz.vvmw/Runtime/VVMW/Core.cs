@@ -355,6 +355,7 @@ namespace JLChnToZ.VRC.VVMW {
                 OnVideoError(VideoError.InvalidURL);
                 return;
             }
+            PrepareMappedInitialLoadForUfc();
             activeHandler.LoadUrl(url, false);
             if (RequestSync()) state = LOADING;
             LoadYTTL();
@@ -370,6 +371,11 @@ namespace JLChnToZ.VRC.VVMW {
         /// </summary>
         /// <param name="videoError"></param>
         public override void OnVideoError(VideoError videoError) {
+            if (!localTransportActiveForUfc && IsMappedTransportForUfc()) {
+                if (state == LOADING) BeginInitialTransportForUfc();
+                else BeginLocalTransportForUfc();
+                localTransportRouteManagedForUfc = localTransportActiveForUfc;
+            }
             if (localTransportActiveForUfc) {
                 isError = true;
                 lastError = videoError;
@@ -380,6 +386,7 @@ namespace JLChnToZ.VRC.VVMW {
             }
             isError = true;
             lastError = videoError;
+            deferredErrorGenerationForUfc = localTransportGenerationForUfc;
             SendCustomEventDelayedFrames(nameof(_DeferSendErrorEvent), 0);
 #if AUDIOLINK_V1
             SetAudioLinkPlayBackState(MediaPlaying.Error);
@@ -431,7 +438,11 @@ namespace JLChnToZ.VRC.VVMW {
 #if COMPILER_UDONSHARP
         public
 #endif
-        void _DeferSendErrorEvent() => SendEvent("_OnVideoError");
+        void _DeferSendErrorEvent() {
+            if (deferredErrorGenerationForUfc != localTransportGenerationForUfc) return;
+            if (localTransportActiveForUfc || IsMappedTransportForUfc()) SendEvent("_OnLocalTransportErrorForUfc");
+            else SendEvent("_OnVideoError");
+        }
 
         /// <summary>
         /// Reload the current URL.
@@ -448,6 +459,9 @@ namespace JLChnToZ.VRC.VVMW {
                 retryUsedPlayers.Clear();
                 PlayUrl(null, 0);
                 return;
+            }
+            if (IsMappedTransportForUfc() || localTransportRouteManagedForUfc) {
+                return; // A stale stock retry must not restart a selected private source.
             }
             isLocalReloading = true;
             if (localTransportActiveForUfc) {
@@ -514,6 +528,10 @@ namespace JLChnToZ.VRC.VVMW {
             if (VRCUrl.IsNullOrEmpty(loadingUrl)) return;
             retryUsedPlayers.Clear();
             retryCount = 0;
+            if (IsMappedTransportForUfc() || localTransportRouteManagedForUfc) {
+                ReloadManagedTransportForUfc((VideoPlayerHandler)activeHandler);
+                return;
+            }
             _ReloadUrl();
         }
 
@@ -589,6 +607,7 @@ namespace JLChnToZ.VRC.VVMW {
         /// Internal use, do not invoke this.
         /// </summary>
         public override void OnVideoReady() {
+            if (localTransportActiveForUfc) FinishMappedInitialReadyForUfc();
             if (localTransportActiveForUfc) {
                 if (!HasLocalTransportIdentityForUfc()) return;
                 loadingUrl = null;
@@ -812,6 +831,7 @@ namespace JLChnToZ.VRC.VVMW {
                 isLoading = true;
                 isError = false;
                 trustUpdated = false;
+                PrepareMappedReceivedLoadForUfc(url);
                 activeHandler.LoadUrl(url, false);
                 SendEvent("_OnVideoBeginLoad");
             }
