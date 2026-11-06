@@ -8,6 +8,8 @@ namespace JLChnToZ.VRC.VVMW {
         // This retains Core's existing state/time anchor; it does not virtualize handler.Time.
         bool localTransportActiveForUfc, localTransportReadyForUfc;
         bool localTransportRouteManagedForUfc, localTransportInitialOpeningForUfc, localTransportRequestAcceptedForUfc;
+        bool localTransportSeekPendingForUfc;
+        float localTransportSeekTargetForUfc, localTransportSeekRawForUfc;
         int deferredErrorGenerationForUfc;
         UdonSharpBehaviour localTransportPresenterForUfc;
         VRCUrl localTransportPresenterCanonicalForUfc;
@@ -30,6 +32,45 @@ namespace JLChnToZ.VRC.VVMW {
         public bool HasLocalTransportErrorForUfc => isError;
         public byte SharedStateForUfc => state;
         public bool LocalTransportRequestAcceptedForUfc => localTransportRequestAcceptedForUfc;
+        public float LocalTransportPictureToleranceForUfc => state == PAUSED ? 0.08F : timeDriftDetectThreshold;
+
+        bool CanRunLocalTransportSyncForUfc() => gameObject.activeInHierarchy && enabled &&
+            HasLocalTransportIdentityForUfc() && HasLocalTransportPresenterForUfc(localUrl) &&
+            state == PLAYING && localTransportReadyForUfc && activeHandler.IsReady && !isError &&
+            localTransportAlignedRevisionForUfc == localTransportRevisionForUfc;
+
+        // Reuse the existing Core cadence. A presenter may restart it after re-enabling,
+        // but never creates another timer or writes the decoder itself.
+        public bool ResumeLocalTransportSyncForUfc(int generation) {
+            if (generation != localTransportGenerationForUfc || !CanRunLocalTransportSyncForUfc()) return false;
+            if (!isResyncTime) {
+                isResyncTime = true;
+                SendCustomEventDelayedSeconds(nameof(_AutoSyncTime), 0.5F);
+            }
+            return true;
+        }
+
+        void ArmLocalTransportSeekForUfc(float target) {
+            localTransportSeekPendingForUfc = state == PLAYING && HasLocalTransportPresenterForUfc(localUrl);
+            localTransportSeekTargetForUfc = target;
+            localTransportSeekRawForUfc = activeHandler.Time;
+        }
+
+        bool AcknowledgeLocalTransportSeekForUfc() {
+            if (!localTransportSeekPendingForUfc) return true;
+            float raw = activeHandler.Time;
+            bool moved = raw > localTransportSeekRawForUfc + 0.002F;
+            localTransportSeekRawForUfc = raw;
+            if (!activeHandler.IsPlaying || !moved || float.IsNaN(raw) || float.IsInfinity(raw) ||
+                raw < localTransportSeekTargetForUfc - 0.1F ||
+                raw > SharedTargetTimeForUfc + timeDriftDetectThreshold) return false;
+            localTransportSeekPendingForUfc = false;
+            // A seek jump is not ordinary buffering progress. Start the existing raw
+            // comparison from the observed post-seek position, without estimating a lead.
+            lastSyncRawTime = raw;
+            isBuffering = false;
+            return true;
+        }
 
         public bool RegisterLocalTransportPresenterForUfc(UdonSharpBehaviour presenter) =>
             RegisterLocalTransportPresenterForUfc(presenter, null, false);
@@ -90,7 +131,7 @@ namespace JLChnToZ.VRC.VVMW {
         public bool RefreshLocalTransportPictureForUfc(int generation) {
             if (generation != localTransportGenerationForUfc || !Utilities.IsValid(activeHandler) ||
                 !activeHandler.IsReady || isError || (state != PLAYING && state != PAUSED)) return false;
-            if (localTransportActiveForUfc && (!HasLocalTransportIdentityForUfc() ||
+            if (localTransportActiveForUfc && (localTransportSeekPendingForUfc || !HasLocalTransportIdentityForUfc() ||
                 localTransportAlignedRevisionForUfc != localTransportRevisionForUfc)) return false;
             float tolerance = state == PAUSED ? 0.1F : timeDriftDetectThreshold;
             if (Mathf.Abs(activeHandler.Time - SharedTargetTimeForUfc) > tolerance) return false;
@@ -158,6 +199,7 @@ namespace JLChnToZ.VRC.VVMW {
             localTransportAlignedRevisionForUfc = -1;
             localTransportReadyForUfc = false;
             localTransportActiveForUfc = true;
+            localTransportSeekPendingForUfc = false;
             localTransportInitialOpeningForUfc = true;
             isLocalReloading = true;
             isLoading = true;
@@ -261,6 +303,7 @@ namespace JLChnToZ.VRC.VVMW {
             localTransportAlignedRevisionForUfc = -1;
             localTransportReadyForUfc = false;
             localTransportActiveForUfc = true;
+            localTransportSeekPendingForUfc = false;
             localTransportInitialOpeningForUfc = false;
             isLocalReloading = true;
             isLoading = true;
@@ -317,7 +360,8 @@ namespace JLChnToZ.VRC.VVMW {
         }
 
         /// <summary>
-        /// One Core-owned alignment per accepted intent revision. No retry loop or predictive lead.
+        /// Initial Core-owned alignment per accepted intent revision. The existing cadence
+        /// may settle remaining Playing drift after this seek has been acknowledged.
         /// Caller must keep picture/audio guarded until presentation has actually settled.
         /// </summary>
         public bool AlignLocalTransportForUfc(int generation) {
@@ -330,8 +374,11 @@ namespace JLChnToZ.VRC.VVMW {
             localTransportDurationForUfc = duration;
             localTransportAlignedRevisionForUfc = localTransportRevisionForUfc;
             if (state == PAUSED) activeHandler.Pause();
-            Time = SharedTargetTimeForUfc;
+            float target = SharedTargetTimeForUfc;
+            ArmLocalTransportSeekForUfc(target);
+            Time = target;
             if (state == PLAYING && !activeHandler.IsPlaying) activeHandler.Play();
+            ResumeLocalTransportSyncForUfc(generation);
             return true;
         }
 
@@ -339,6 +386,7 @@ namespace JLChnToZ.VRC.VVMW {
         public bool CompleteLocalTransportForUfc(int generation) {
             if (generation != localTransportGenerationForUfc || !HasLocalTransportIdentityForUfc() ||
                 !localTransportReadyForUfc || !activeHandler.IsReady ||
+                localTransportSeekPendingForUfc ||
                 localTransportAlignedRevisionForUfc != localTransportRevisionForUfc) return false;
             float tolerance = state == PAUSED ? 0.1F : timeDriftDetectThreshold;
             if ((state == PAUSED && !activeHandler.IsPaused) ||
@@ -369,6 +417,7 @@ namespace JLChnToZ.VRC.VVMW {
             localTransportGenerationForUfc++;
             localTransportActiveForUfc = false;
             localTransportReadyForUfc = false;
+            localTransportSeekPendingForUfc = false;
             localTransportRouteManagedForUfc = localTransportInitialOpeningForUfc = false;
             localTransportAlignedRevisionForUfc = -1;
             isLocalReloading = false;
