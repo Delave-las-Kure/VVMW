@@ -297,6 +297,15 @@ namespace JLChnToZ.VRC.VVMW {
             }
         }
 
+        // UFC fork seam: identity by default; local transport routing only.
+        // Upstream VizVid1.8.2 by Jeremy Lam (JLChnToZ), MIT; retain package LICENSE.
+#if COMPILER_UDONSHARP
+        public
+#else
+        protected
+#endif
+        virtual VRCUrl ResolveLocalTransportUrlForUfc(VRCUrl canonicalUrl) => canonicalUrl;
+
         void LoadUrl() {
             isReady = false;
             SetPlaybackSpeed();
@@ -307,7 +316,7 @@ namespace JLChnToZ.VRC.VVMW {
                     SendCustomEventDelayedSeconds(nameof(_DoLoadUrl), delay);
                 } else {
                     loadedUrl = currentUrl;
-                    videoPlayer.LoadURL(currentUrl);
+                    videoPlayer.LoadURL(ResolveLocalTransportUrlForUfc(currentUrl));
                 }
             }
         }
@@ -320,7 +329,7 @@ namespace JLChnToZ.VRC.VVMW {
             if (!isActive || VRCUrl.IsNullOrEmpty(currentUrl))
                 return;
             loadedUrl = currentUrl;
-            videoPlayer.LoadURL(currentUrl);
+            videoPlayer.LoadURL(ResolveLocalTransportUrlForUfc(currentUrl));
         }
 
 #if COMPILER_UDONSHARP
