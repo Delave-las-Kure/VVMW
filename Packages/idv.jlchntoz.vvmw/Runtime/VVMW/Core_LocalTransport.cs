@@ -4,6 +4,22 @@ using UdonSharp;
 
 namespace JLChnToZ.VRC.VVMW {
     public partial class Core {
+        // Read-only output ownership check; no reference to optional mirror types.
+        public bool OwnsExclusiveAudioOutputForUfc(AbstractAudioController owner, AudioSource output) {
+            if (!Utilities.IsValid(owner) || !Utilities.IsValid(output)) return false;
+            if (audioSources != null)
+                for (int i = 0; i < audioSources.Length; i++)
+                    if (audioSources[i] == output) return false;
+            int matches = 0;
+            if (audioControllers != null)
+                for (int i = 0; i < audioControllers.Length; i++) {
+                    var candidate = audioControllers[i];
+                    if (!Utilities.IsValid(candidate)) continue;
+                    if (candidate == owner) matches++;
+                    else if (candidate.OutputAudioSourceForUfc == output) return false;
+                }
+            return matches == 1;
+        }
         // Optional fork API. No module/caller means these guards remain false.
         // This retains Core's existing state/time anchor; it does not virtualize handler.Time.
         bool localTransportActiveForUfc, localTransportReadyForUfc;

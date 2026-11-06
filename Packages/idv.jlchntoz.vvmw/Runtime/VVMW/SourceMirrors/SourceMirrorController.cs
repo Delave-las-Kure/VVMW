@@ -29,10 +29,14 @@ namespace JLChnToZ.VRC.VVMW {
             if (!Utilities.IsValid(core) || VRCUrl.IsNullOrEmpty(canonical) ||
                 videoOnlyRenderers == null || videoOnlyRenderers.Length == 0 ||
                 audioGates == null || audioGates.Length == 0) return false;
-            for (int i=0;i<videoOnlyRenderers.Length;i++)
+            for (int i=0;i<videoOnlyRenderers.Length;i++) {
                 if (!Utilities.IsValid(videoOnlyRenderers[i])) return false;
-            for (int i=0;i<audioGates.Length;i++)
-                if (!Utilities.IsValid(audioGates[i]) || !audioGates[i].IsWired) return false;
+                for (int j=0;j<i;j++) if (videoOnlyRenderers[i] == videoOnlyRenderers[j]) return false;
+            }
+            for (int i=0;i<audioGates.Length;i++) {
+                if (!Utilities.IsValid(audioGates[i]) || !audioGates[i].IsWiredFor(core)) return false;
+                for (int j=0;j<i;j++) if (audioGates[i].Output == audioGates[j].Output) return false;
+            }
             return true;
         }
         bool SameFilm() => !VRCUrl.IsNullOrEmpty(core.Url) && core.Url.Equals(canonical);

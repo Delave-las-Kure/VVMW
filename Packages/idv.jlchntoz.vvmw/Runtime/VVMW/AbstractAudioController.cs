@@ -9,6 +9,9 @@ namespace JLChnToZ.VRC.VVMW {
         [SerializeField, HideInInspector] internal protected Core core;
         [SerializeField, Range(0, 1), FieldChangeCallback(nameof(Volume))] protected float volume = 1;
         float internalVolume = 1;
+        [SerializeField, HideInInspector] internal bool preserveOutputRouteForUfc;
+
+        public AudioSource OutputAudioSourceForUfc => audioSource;
 
         public float Volume {
             get => volume;

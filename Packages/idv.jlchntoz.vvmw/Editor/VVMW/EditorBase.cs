@@ -16,8 +16,6 @@ namespace JLChnToZ.VRC.VVMW.Editors {
         const string bannerTextureGUID = "e8354bc2ac14e86498c0983daf484661";
         const string iconGUID = "a24ecd1d23cca9e46871bc17dfe3bd46";
         const string fontGUID = "088cf7162d0a81c46ad54028cfdcb382";
-        const string listingsID = "idv.jlchntoz.xtlcdn-listing";
-        const string listingsURL = "https://xtlcdn.github.io/vpm/index.json";
         const string documentationURL = "https://xtlcdn.github.io/VizVid/docs/";
         const string discordServerURL = "https://discord.gg/fkDueQMbj8";
         protected static readonly Dictionary<Type, (FieldInfo fieldInfo, Type editorType)> controllableTypes = new Dictionary<Type, (FieldInfo, Type)>();
@@ -25,7 +23,6 @@ namespace JLChnToZ.VRC.VVMW.Editors {
         readonly Dictionary<string, (string key, bool shown)> foldoutStates = new Dictionary<string, (string, bool)>();
         static readonly GUIContent[] buttonBar = new[] { new GUIContent(), new GUIContent(), new GUIContent() };
         static Texture2D bannerTexture;
-        static PackageSelfUpdater selfUpdater;
         static Font font;
         static GUIStyle versionLabelStyle;
         protected static EditorI18N i18n;
@@ -119,10 +116,6 @@ namespace JLChnToZ.VRC.VVMW.Editors {
         }
 
         protected virtual void OnEnable() {
-            if (selfUpdater == null) {
-                selfUpdater = new PackageSelfUpdater(GetType().Assembly, listingsID, listingsURL);
-                selfUpdater.CheckInstallationInBackground();
-            }
             if (bannerTexture == null) {
                 var assetPath = AssetDatabase.GUIDToAssetPath(bannerTextureGUID);
                 if (!string.IsNullOrEmpty(assetPath)) bannerTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
@@ -131,18 +124,12 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                 var assetPath = AssetDatabase.GUIDToAssetPath(fontGUID);
                 if (!string.IsNullOrEmpty(assetPath)) font = AssetDatabase.LoadAssetAtPath<Font>(assetPath);
             }
-#if VPM_RESOLVER_INCLUDED
-            selfUpdater.OnVersionRefreshed += Repaint;
-#endif
             i18n = EditorI18N.Instance;
             isUdonSharp = target is UdonSharpBehaviour;
             firstRun = true;
         }
 
         protected virtual void OnDisable() {
-#if VPM_RESOLVER_INCLUDED
-            if (selfUpdater != null) selfUpdater.OnVersionRefreshed -= Repaint;
-#endif
         }
 
         protected bool GetFirstVizVidComponent(out IVizVidCompoonent firstComponent) {
@@ -196,13 +183,13 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                         fontStyle = FontStyle.Bold,
                         font = font,
                     };
-                var tempContent = Utils.GetTempContent($"v{selfUpdater.CurrentVersion}");
+                var tempContent = Utils.GetTempContent($"v{VizVidFork.Version}");
                 var versionSize = versionLabelStyle.CalcSize(tempContent);
                 GUI.Label(new Rect(bannerRect.xMax - versionSize.x, bannerRect.yMin, versionSize.x, versionSize.y), tempContent, versionLabelStyle);
             }
             EditorGUILayout.Space();
             I18NUtils.DrawLocaleField();
-            selfUpdater.DrawUpdateNotifier();
+            EditorGUILayout.HelpBox("Cinema fork: update only from a reviewed fork build. " + VizVidFork.Build, MessageType.Info);
             EditorGUILayout.Space();
             i18n.GetLocalizedContent("GlobalSettings", buttonBar[0]);
             i18n.GetLocalizedContent("Documentation", buttonBar[1]);
