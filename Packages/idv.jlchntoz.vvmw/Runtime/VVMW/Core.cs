@@ -371,10 +371,15 @@ namespace JLChnToZ.VRC.VVMW {
         /// </summary>
         /// <param name="videoError"></param>
         public override void OnVideoError(VideoError videoError) {
-            if (!localTransportActiveForUfc && IsMappedTransportForUfc()) {
+            if (!localTransportActiveForUfc && (IsMappedTransportForUfc() || WatchesLocalTransportLoadForUfc(localUrl))) {
                 if (state == LOADING) BeginInitialTransportForUfc();
                 else BeginLocalTransportForUfc();
                 localTransportRouteManagedForUfc = localTransportActiveForUfc;
+                if (localTransportActiveForUfc) {
+                    var video = VideoTransportForUfc(activeHandler);
+                    if (Utilities.IsValid(video)) video.AdoptLocalTransportLoadForUfc(localTransportGenerationForUfc);
+                    NotifyLocalTransportPresenterForUfc("_OnLocalTransportBeginForUfc");
+                }
             }
             if (localTransportActiveForUfc) {
                 isError = true;
@@ -448,6 +453,9 @@ namespace JLChnToZ.VRC.VVMW {
         /// Reload the current URL.
         /// </summary>
         public void _ReloadUrl() {
+            if (IsMappedTransportForUfc() || localTransportRouteManagedForUfc) {
+                return; // A stale stock retry must neither restart nor clear a private failure.
+            }
             isError = false;
             if (VRCUrl.IsNullOrEmpty(loadingUrl) ||
                 (synced && state == IDLE) ||
@@ -459,9 +467,6 @@ namespace JLChnToZ.VRC.VVMW {
                 retryUsedPlayers.Clear();
                 PlayUrl(null, 0);
                 return;
-            }
-            if (IsMappedTransportForUfc() || localTransportRouteManagedForUfc) {
-                return; // A stale stock retry must not restart a selected private source.
             }
             isLocalReloading = true;
             if (localTransportActiveForUfc) {
@@ -531,6 +536,10 @@ namespace JLChnToZ.VRC.VVMW {
             if (IsMappedTransportForUfc() || localTransportRouteManagedForUfc) {
                 ReloadManagedTransportForUfc((VideoPlayerHandler)activeHandler);
                 return;
+            }
+            if (WatchesLocalTransportLoadForUfc(localUrl)) {
+                var video = VideoTransportForUfc(activeHandler);
+                if (Utilities.IsValid(video) && ReloadManagedTransportForUfc(video) > 0) return;
             }
             _ReloadUrl();
         }
