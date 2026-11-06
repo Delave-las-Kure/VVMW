@@ -23,7 +23,7 @@ namespace JLChnToZ.VRC.VVMW {
         int stableSamples, phase;
 
         public bool CanDetach => mirrorsOff && !held && !pending &&
-            Utilities.IsValid(core) && !core.IsLocalTransportActiveForUfc;
+            Utilities.IsValid(core) && !core.IsLocalTransportActiveForUfc && !core.IsLocalTransportPresentationPendingForUfc;
 
         bool Configured() {
             if (!Utilities.IsValid(core) || VRCUrl.IsNullOrEmpty(canonical) ||
@@ -98,7 +98,7 @@ namespace JLChnToZ.VRC.VVMW {
             if (!SameFilm() || core.SharedStateForUfc==0) {
                 core.SetPreferredLocalTransportUrlForUfc(canonical,null);
                 core.RegisterLocalTransportPresenterForUfc(null);
-                pending=failed=false;mirrorsOff=true;Release();enabled=false;requestAccepted=true;
+                disabling=false;pending=failed=false;mirrorsOff=true;Release();enabled=false;requestAccepted=true;
                 return;
             }
             disabling=true;
@@ -138,10 +138,11 @@ namespace JLChnToZ.VRC.VVMW {
         void Finish() {
             pending=false;failed=false;diagnostic="Ready";
             if (disabling) {
-                mirrorsOff=true;core.RegisterLocalTransportPresenterForUfc(null);enabled=false;
+                disabling=false;mirrorsOff=true;core.RegisterLocalTransportPresenterForUfc(null);enabled=false;
             }
         }
         public void _OnLocalTransportCancelledForUfc() {
+            if (disabling) { Release();Finish();diagnostic="Mirrors off";return; }
             if (!held || !enabled || !gameObject.activeInHierarchy) return;
             pending=true;failed=false;phase=0;Queue();
         }
@@ -149,7 +150,8 @@ namespace JLChnToZ.VRC.VVMW {
             tickQueued=false;
             if (!pending || !enabled || !gameObject.activeInHierarchy) return;
             tickCount++;
-            if (!SameFilm() || (!core.IsLocalTransportActiveForUfc && !core.IsLoading && !core.IsReady)) {
+            if (!SameFilm() || (!core.IsLocalTransportActiveForUfc && !core.IsLocalTransportPresentationPendingForUfc && !core.IsLoading && !core.IsReady)) {
+                if (disabling) { Release();Finish();diagnostic="Mirrors off";return; }
                 pending=failed=false;Release();DetachUnlessWatching();diagnostic="Transition cancelled";return;
             }
             if (core.LocalTransportGenerationForUfc!=generation) {
@@ -166,7 +168,10 @@ namespace JLChnToZ.VRC.VVMW {
             }
             if (core.IsLocalTransportActiveForUfc) core.ResumeLocalTransportSyncForUfc(generation);
             if (!InWindow()) {Hold();stableSamples=phase=0;previousRaw=core.Time;Queue();return;}
-            if (phase==2) { Release();Finish();return; }
+            if (phase==2) {
+                if (core.IsLocalTransportPresentationPendingForUfc && !core.AcknowledgeLocalTransportPresentationForUfc(generation)) {Hold();stableSamples=phase=0;Queue();return;}
+                Release();Finish();return;
+            }
             if (phase==1) {
                 if (core.IsLocalTransportActiveForUfc && !core.CompleteLocalTransportForUfc(generation)) {Queue();return;}
                 Show();phase=2;Queue();return;

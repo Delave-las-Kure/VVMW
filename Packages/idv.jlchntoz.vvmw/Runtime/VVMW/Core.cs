@@ -371,6 +371,8 @@ namespace JLChnToZ.VRC.VVMW {
         /// </summary>
         /// <param name="videoError"></param>
         public override void OnVideoError(VideoError videoError) {
+            if (!localTransportActiveForUfc && HasLocalTransportPresentationForUfc())
+                RetainLocalTransportFailureAuthorityForUfc();
             if (!localTransportActiveForUfc && (IsMappedTransportForUfc() || WatchesLocalTransportLoadForUfc(localUrl))) {
                 if (state == LOADING) BeginInitialTransportForUfc();
                 else BeginLocalTransportForUfc();
@@ -445,7 +447,7 @@ namespace JLChnToZ.VRC.VVMW {
 #endif
         void _DeferSendErrorEvent() {
             if (deferredErrorGenerationForUfc != localTransportGenerationForUfc) return;
-            if (localTransportActiveForUfc || IsMappedTransportForUfc()) SendEvent("_OnLocalTransportErrorForUfc");
+            if (localTransportActiveForUfc || HasLocalTransportPresentationForUfc() || IsMappedTransportForUfc()) SendEvent("_OnLocalTransportErrorForUfc");
             else SendEvent("_OnVideoError");
         }
 
@@ -453,7 +455,7 @@ namespace JLChnToZ.VRC.VVMW {
         /// Reload the current URL.
         /// </summary>
         public void _ReloadUrl() {
-            if (IsMappedTransportForUfc() || localTransportRouteManagedForUfc) {
+            if (IsMappedTransportForUfc() || localTransportRouteManagedForUfc || HasLocalTransportPresentationForUfc()) {
                 return; // A stale stock retry must neither restart nor clear a private failure.
             }
             isError = false;
@@ -533,7 +535,7 @@ namespace JLChnToZ.VRC.VVMW {
             if (VRCUrl.IsNullOrEmpty(loadingUrl)) return;
             retryUsedPlayers.Clear();
             retryCount = 0;
-            if (IsMappedTransportForUfc() || localTransportRouteManagedForUfc) {
+            if (IsMappedTransportForUfc() || localTransportRouteManagedForUfc || HasLocalTransportPresentationForUfc()) {
                 ReloadManagedTransportForUfc((VideoPlayerHandler)activeHandler);
                 return;
             }
@@ -703,7 +705,7 @@ namespace JLChnToZ.VRC.VVMW {
         /// Internal use, do not invoke this.
         /// </summary>
         public override void OnVideoEnd() {
-            if (localTransportActiveForUfc) return;
+            if (localTransportActiveForUfc || localTransportPresentationPendingForUfc) return;
             if (!VRCUrl.IsNullOrEmpty(loadingUrl) || isLocalReloading) return;
             lastActivePlayer = activePlayer;
             lastUrl = localUrl;
@@ -726,7 +728,7 @@ namespace JLChnToZ.VRC.VVMW {
         /// Internal use, do not invoke this.
         /// </summary>
         public override void OnVideoLoop() {
-            if (localTransportActiveForUfc) return;
+            if (localTransportActiveForUfc || localTransportPresentationPendingForUfc) return;
             SendEvent("_onVideoLoop");
             activeHandler.Time = 0;
             if (!synced || !Networking.IsOwner(gameObject)) return;
@@ -743,8 +745,8 @@ namespace JLChnToZ.VRC.VVMW {
             lastSyncTime = Networking.GetNetworkDateTime();
             ownerNetworkTime = Networking.GetServerTimeInMilliseconds();
             syncedSpeed = speed;
-            if (localTransportActiveForUfc) {
-                // Local decoder readiness never replaces the room state/anchor or canonical URLs.
+            if (localTransportActiveForUfc || (localTransportPresentationPendingForUfc && state != LOADING)) {
+                // Preserve the established room anchor until final output acknowledgement.
                 activePlayer = localActivePlayer;
 #if UNITY_ANDROID || UNITY_IOS
                 if (!VRCUrl.IsNullOrEmpty(altUrl)) { pcUrl = altUrl; questUrl = localUrl; }
@@ -819,9 +821,9 @@ namespace JLChnToZ.VRC.VVMW {
                 altUrl = questUrl;
             }
             bool shouldReload = state != IDLE && (activePlayerChanged || (localUrl != url && (VRCUrl.IsNullOrEmpty(localUrl) || VRCUrl.IsNullOrEmpty(url) || !localUrl.Equals(url))));
-            if (localTransportActiveForUfc) {
+            if (localTransportActiveForUfc || localTransportPresentationPendingForUfc) {
                 if (shouldReload || state == IDLE) CancelLocalTransportForUfc();
-                else {
+                else if (localTransportActiveForUfc) {
                     // The received Core fields already contain the newest command; do not touch native yet.
                     AcceptReceivedLocalTransportIntentForUfc();
                     return;

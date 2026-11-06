@@ -72,7 +72,7 @@ namespace JLChnToZ.VRC.VVMW {
         }
 
         public void RetagLocalTransportLoadForUfc(int oldGeneration, int generation) {
-            if (!localLoadPendingForUfc || localLoadGenerationForUfc != oldGeneration) return;
+            if (localLoadGenerationForUfc != oldGeneration) return;
             localLoadGenerationForUfc = generation;
             if (issuedLoadGenerationForUfc == oldGeneration) issuedLoadGenerationForUfc = generation;
         }
@@ -96,7 +96,7 @@ namespace JLChnToZ.VRC.VVMW {
         }
 
         public void CancelLocalTransportLoadForUfc(int generation) {
-            if (!localLoadPendingForUfc || localLoadGenerationForUfc != generation) return;
+            if (localLoadGenerationForUfc != generation) return;
             localLoadPendingForUfc = localLoadIssuedForUfc = false;
             localLoadBlockedForUfc = true;
             loadedUrl = null;
