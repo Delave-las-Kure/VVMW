@@ -82,6 +82,7 @@ namespace JLChnToZ.VRC.VVMW {
                 if (syncOffset == value) return;
                 syncOffset = value;
                 SendEvent("_OnSyncOffsetChange");
+                if (localTransportActiveForUfc) { localTransportRevisionForUfc++; return; }
                 if (synced && Utilities.IsValid(activeHandler) && activeHandler.IsPlaying) {
                     var duration = activeHandler.Duration;
                     if (duration <= 0 || float.IsInfinity(duration)) return;
@@ -105,6 +106,11 @@ namespace JLChnToZ.VRC.VVMW {
                 return activeHandler.Time / duration;
             }
             set {
+                if (localTransportActiveForUfc) {
+                    if (localTransportDurationForUfc > 0)
+                        SetSharedTimeDuringLocalTransportForUfc(localTransportDurationForUfc * value);
+                    return;
+                }
                 if (!Utilities.IsValid(activeHandler)) return;
                 var duration = activeHandler.Duration;
                 if (duration <= 0 || float.IsInfinity(duration)) return;
@@ -128,7 +134,12 @@ namespace JLChnToZ.VRC.VVMW {
             get => speed;
             set {
                 if (speed == value) return;
+                float transportTarget = localTransportActiveForUfc ? SharedTargetTimeForUfc : 0;
                 speed = Mathf.Clamp(value, 0.1F, 2);
+                if (localTransportActiveForUfc) {
+                    actualSpeed = Utilities.IsValid(activeHandler) && activeHandler.SupportSpeedAdjustment ? speed : 1;
+                    SetLocalTransportIntentForUfc(state, transportTarget);
+                }
                 SyncSpeed();
                 RequestSync();
             }
@@ -162,11 +173,13 @@ namespace JLChnToZ.VRC.VVMW {
         /// Internal use only. Do not call this method.
         /// </summary>
         public override void OnOwnershipTransferred(VRCPlayerApi player) {
+            InvalidateLocalTransportAuthorityForUfc();
             if (!player.isLocal) isLocalReloading = false;
             syncLatency = 0;
         }
 
         void StartSyncTime() {
+            if (localTransportActiveForUfc) return;
             StartCheckRangeLoop();
             if (!synced) return;
             SyncTime(true);
@@ -188,7 +201,7 @@ namespace JLChnToZ.VRC.VVMW {
         public
 #endif
         void _AutoSyncTime() {
-            if (!gameObject.activeInHierarchy || !enabled || isLoading || isLocalReloading || !Utilities.IsValid(activeHandler) || !activeHandler.IsReady) {
+            if (!gameObject.activeInHierarchy || !enabled || localTransportActiveForUfc || isLoading || isLocalReloading || !Utilities.IsValid(activeHandler) || !activeHandler.IsReady) {
                 isResyncTime = false;
                 return;
             }
@@ -236,6 +249,7 @@ namespace JLChnToZ.VRC.VVMW {
         }
 
         void SyncTime(bool forced) {
+            if (localTransportActiveForUfc) return;
             if (Networking.IsOwner(gameObject)) {
                 if (!forced && Utilities.IsValid(activeHandler) && IsRangeLooping) {
                     var halfRange = rangeLoopDuration / 2;
@@ -289,7 +303,7 @@ namespace JLChnToZ.VRC.VVMW {
         /// <param name="start">The start time of the range loop in seconds. It must be non-negative and less than the end time.</param>
         /// <param name="end">The end time of the range loop in seconds. It must be greater than the start time.</param>
         public void SetRangeLoop(float start, float end) {
-            var duration = Duration;
+            var duration = localTransportActiveForUfc ? localTransportDurationForUfc : Duration;
             if (duration <= 0 || float.IsInfinity(duration)) {
                 _ClearRangeLoop();
                 return;
@@ -316,6 +330,10 @@ namespace JLChnToZ.VRC.VVMW {
                 SendEvent("_OnRangeLoopChange");
                 StartCheckRangeLoop();
             }
+            if (localTransportActiveForUfc) {
+                localTransportRevisionForUfc++;
+                RememberLocalTransportIntentForUfc();
+            }
         }
 
         /// <summary>
@@ -329,6 +347,10 @@ namespace JLChnToZ.VRC.VVMW {
             localRangeLoopStart = 0;
             localRangeLoopEnd = float.PositiveInfinity;
             rangeLoopDuration = 0;
+            if (localTransportActiveForUfc) {
+                localTransportRevisionForUfc++;
+                RememberLocalTransportIntentForUfc();
+            }
             SendEvent("_OnRangeLoopToggled");
             RequestSync();
         }
@@ -340,6 +362,7 @@ namespace JLChnToZ.VRC.VVMW {
         public
 #endif
         void _CheckRangeLoop() {
+            if (localTransportActiveForUfc) { isCheckingRangeLoop = false; return; }
             if (!Utilities.IsValid(activeHandler) || !activeHandler.IsPlaying || localRangeLoopStartMs < 0 || localRangeLoopEndMs <= localRangeLoopStartMs) {
                 isCheckingRangeLoop = false;
                 return;
