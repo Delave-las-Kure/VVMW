@@ -49,7 +49,7 @@ namespace JLChnToZ.VRC.VVMW {
         float playbackSpeed = 1, actualPlaybackSpeed = 1;
         VRCUrl loadedUrl;
         VRCUrl localCanonicalUrlForUfc, localPhysicalUrlForUfc, loadedPhysicalUrlForUfc;
-        bool localLoadPendingForUfc, localLoadIssuedForUfc, nativeLoadPresentForUfc;
+        bool localLoadPendingForUfc, localLoadIssuedForUfc, nativeLoadPresentForUfc, localLoadBlockedForUfc;
         int localLoadGenerationForUfc, issuedLoadGenerationForUfc;
 
         public VRCUrl LoadedPhysicalUrlForUfc => loadedPhysicalUrlForUfc;
@@ -63,6 +63,7 @@ namespace JLChnToZ.VRC.VVMW {
         }
 
         public void PrepareLocalTransportLoadForUfc(int generation) {
+            localLoadBlockedForUfc = false;
             localLoadGenerationForUfc = generation;
             localLoadPendingForUfc = true;
             localLoadIssuedForUfc = false;
@@ -84,12 +85,58 @@ namespace JLChnToZ.VRC.VVMW {
         public void CancelLocalTransportLoadForUfc(int generation) {
             if (!localLoadPendingForUfc || localLoadGenerationForUfc != generation) return;
             localLoadPendingForUfc = localLoadIssuedForUfc = false;
+            localLoadBlockedForUfc = true;
             loadedUrl = null;
             isReady = false;
         }
 
+        public void AbortLocalTransportLoadForUfc(int generation) {
+            if (localLoadGenerationForUfc != generation) return;
+            CancelLocalTransportLoadForUfc(generation);
+            videoPlayer.Stop();
+            nativeLoadPresentForUfc = false;
+        }
+
         bool IgnoreLocalTransportCallbackForUfc() => localLoadPendingForUfc &&
             (!localLoadIssuedForUfc || issuedLoadGenerationForUfc != localLoadGenerationForUfc || !videoPlayer.IsReady);
+
+        // Explicit opt-in capture after the caller has observed native settling.
+        // Stock's playing-only blit loop cannot refresh an already paused seek frame.
+        public bool RefreshLocalTransportPictureForUfc() {
+            if (!isActive || !IsReady) return false;
+            var current = ReadRendererTexture();
+            if (!Utilities.IsValid(current) || current.width < 16 || current.height < 16) return false;
+            texture = current;
+            hasTexture = true;
+            isWaitingForTexture = false;
+            if (!isTexturePollScheduled) {
+                isTexturePollScheduled = true;
+                SendCustomEventDelayedSeconds(nameof(_GetTexture), 0.5F);
+            }
+            if (core.enableMipmap || (isAvPro && useFlickerWorkaround && Utilities.IsValid(blitMaterial))) {
+                if (Utilities.IsValid(bufferedTexture) &&
+                    (bufferedTexture.width != current.width || bufferedTexture.height != current.height)) {
+                    VRCRenderTexture.ReleaseTemporary(bufferedTexture);
+                    bufferedTexture = null;
+                }
+                if (!Utilities.IsValid(bufferedTexture)) {
+                    var descriptor = new RenderTextureDescriptor(current.width, current.height,
+                        RenderTextureFormat.ARGB64, 0, core.enableMipmap ? -1 : 0, RenderTextureReadWrite.sRGB);
+                    descriptor.msaaSamples = 1;
+                    descriptor.useMipMap = core.enableMipmap;
+                    descriptor.autoGenerateMips = core.enableMipmap;
+                    bufferedTexture = VRCRenderTexture.GetTemporary(descriptor);
+                    bufferedTexture.wrapMode = TextureWrapMode.Clamp;
+                }
+                if (Utilities.IsValid(blitMaterial)) {
+                    blitMaterial.SetTextureOffset(texturePropertyID, Vector2.zero);
+                    blitMaterial.SetTextureScale(texturePropertyID, Vector2.one);
+                    VRCGraphics.Blit(current, bufferedTexture, blitMaterial);
+                } else VRCGraphics.Blit(current, bufferedTexture);
+            }
+            core._OnTextureChanged();
+            return true;
+        }
 
 #if COMPILER_UDONSHARP
         public
@@ -320,6 +367,7 @@ namespace JLChnToZ.VRC.VVMW {
         internal protected
 #endif
         override void LoadUrl(VRCUrl url, bool reload) {
+            localLoadBlockedForUfc = false;
             if (videoPlayer.IsPlaying || (localLoadPendingForUfc && nativeLoadPresentForUfc)) {
                 videoPlayer.Stop();
                 nativeLoadPresentForUfc = false;
@@ -383,7 +431,7 @@ namespace JLChnToZ.VRC.VVMW {
 #endif
         void _DoLoadUrl() {
             isLoadUrlRequested = false;
-            if (!isActive || VRCUrl.IsNullOrEmpty(currentUrl))
+            if (!isActive || localLoadBlockedForUfc || VRCUrl.IsNullOrEmpty(currentUrl))
                 return;
             LoadNativeTransportForUfc();
         }

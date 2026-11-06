@@ -1,5 +1,6 @@
 using UnityEngine;
 using VRC.SDKBase;
+using UdonSharp;
 
 namespace JLChnToZ.VRC.VVMW {
     public partial class Core {
@@ -8,6 +9,7 @@ namespace JLChnToZ.VRC.VVMW {
         bool localTransportActiveForUfc, localTransportReadyForUfc;
         bool localTransportRouteManagedForUfc, localTransportInitialOpeningForUfc, localTransportRequestAcceptedForUfc;
         int deferredErrorGenerationForUfc;
+        UdonSharpBehaviour localTransportPresenterForUfc;
         int localTransportGenerationForUfc, localTransportRevisionForUfc;
         int localTransportAlignedRevisionForUfc = -1;
         VRCUrl localTransportCanonicalForUfc;
@@ -20,8 +22,40 @@ namespace JLChnToZ.VRC.VVMW {
 
         public bool IsLocalTransportActiveForUfc => localTransportActiveForUfc;
         public int LocalTransportGenerationForUfc => localTransportGenerationForUfc;
+        public int LocalTransportRevisionForUfc => localTransportRevisionForUfc;
+        public bool IsLocalTransportReadyForUfc => localTransportReadyForUfc &&
+            Utilities.IsValid(activeHandler) && activeHandler.IsReady;
+        public bool HasLocalTransportErrorForUfc => isError;
         public byte SharedStateForUfc => state;
         public bool LocalTransportRequestAcceptedForUfc => localTransportRequestAcceptedForUfc;
+
+        public bool RegisterLocalTransportPresenterForUfc(UdonSharpBehaviour presenter) {
+            if (Utilities.IsValid(localTransportPresenterForUfc) && Utilities.IsValid(presenter) &&
+                localTransportPresenterForUfc != presenter) return false;
+            localTransportPresenterForUfc = presenter;
+            return true;
+        }
+
+        public bool RefreshLocalTransportPictureForUfc(int generation) {
+            if (generation != localTransportGenerationForUfc || !Utilities.IsValid(activeHandler) ||
+                !activeHandler.IsReady || isError || (state != PLAYING && state != PAUSED)) return false;
+            if (localTransportActiveForUfc && (!HasLocalTransportIdentityForUfc() ||
+                localTransportAlignedRevisionForUfc != localTransportRevisionForUfc)) return false;
+            float tolerance = state == PAUSED ? 0.1F : timeDriftDetectThreshold;
+            if (Mathf.Abs(activeHandler.Time - SharedTargetTimeForUfc) > tolerance) return false;
+            var video = VideoTransportForUfc(activeHandler);
+            return Utilities.IsValid(video) && video.RefreshLocalTransportPictureForUfc();
+        }
+
+        public bool FailLocalTransportForUfc(int generation) {
+            if (generation != localTransportGenerationForUfc || !HasLocalTransportIdentityForUfc()) return false;
+            var video = VideoTransportForUfc(activeHandler);
+            if (Utilities.IsValid(video)) video.AbortLocalTransportLoadForUfc(generation);
+            else activeHandler.Pause();
+            isError = true;
+            localTransportReadyForUfc = false;
+            return true;
+        }
 
         VideoPlayerHandler VideoTransportForUfc(AbstractMediaPlayerHandler handler) {
             if (!Utilities.IsValid(handler)) return null;
@@ -282,6 +316,9 @@ namespace JLChnToZ.VRC.VVMW {
             localTransportRouteManagedForUfc = localTransportInitialOpeningForUfc = false;
             localTransportAlignedRevisionForUfc = -1;
             isLocalReloading = false;
+            if (Utilities.IsValid(localTransportPresenterForUfc) && localTransportPresenterForUfc.enabled &&
+                localTransportPresenterForUfc.gameObject.activeInHierarchy)
+                localTransportPresenterForUfc.SendCustomEvent("_OnLocalTransportCancelledForUfc");
         }
 
         void InvalidateLocalTransportAuthorityForUfc() {
