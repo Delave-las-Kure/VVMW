@@ -114,6 +114,7 @@ namespace JLChnToZ.VRC.VVMW {
                 if (!Utilities.IsValid(activeHandler)) return;
                 var duration = activeHandler.Duration;
                 if (duration <= 0 || float.IsInfinity(duration)) return;
+                if (SetPausedProgressForPresenterForUfc(duration * value)) return;
                 Time = duration * value;
                 RequestSync();
             }
@@ -176,6 +177,9 @@ namespace JLChnToZ.VRC.VVMW {
             InvalidateLocalTransportAuthorityForUfc();
             if (!player.isLocal) isLocalReloading = false;
             syncLatency = 0;
+            if (player.isLocal && localTransportInitialOpeningForUfc && state == LOADING &&
+                localTransportReadyForUfc && Utilities.IsValid(activeHandler) && activeHandler.IsReady && !isError)
+                OnVideoReady(); // A real Ready received before becoming owner still establishes the first clock once.
         }
 
         void StartSyncTime() {

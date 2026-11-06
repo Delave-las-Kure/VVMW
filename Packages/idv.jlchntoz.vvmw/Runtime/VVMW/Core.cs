@@ -837,6 +837,7 @@ namespace JLChnToZ.VRC.VVMW {
             }
             localUrl = url;
             if (shouldReload) LoadYTTL();
+            if (!shouldReload && state == PAUSED && AdoptLocalTransportForPresenterForUfc() > 0) return;
             if (Utilities.IsValid(activeHandler) && activeHandler.IsReady) {
                 bool forceSyncTime = false;
                 int intState = state;

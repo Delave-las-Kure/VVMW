@@ -10,6 +10,8 @@ namespace JLChnToZ.VRC.VVMW {
         bool localTransportRouteManagedForUfc, localTransportInitialOpeningForUfc, localTransportRequestAcceptedForUfc;
         int deferredErrorGenerationForUfc;
         UdonSharpBehaviour localTransportPresenterForUfc;
+        VRCUrl localTransportPresenterCanonicalForUfc;
+        bool localTransportPresenterWatchesLoadsForUfc;
         int localTransportGenerationForUfc, localTransportRevisionForUfc;
         int localTransportAlignedRevisionForUfc = -1;
         VRCUrl localTransportCanonicalForUfc;
@@ -29,10 +31,59 @@ namespace JLChnToZ.VRC.VVMW {
         public byte SharedStateForUfc => state;
         public bool LocalTransportRequestAcceptedForUfc => localTransportRequestAcceptedForUfc;
 
-        public bool RegisterLocalTransportPresenterForUfc(UdonSharpBehaviour presenter) {
+        public bool RegisterLocalTransportPresenterForUfc(UdonSharpBehaviour presenter) =>
+            RegisterLocalTransportPresenterForUfc(presenter, null, false);
+
+        public bool RegisterLocalTransportPresenterForUfc(UdonSharpBehaviour presenter, VRCUrl canonicalUrl, bool watchLoads) {
             if (Utilities.IsValid(localTransportPresenterForUfc) && Utilities.IsValid(presenter) &&
                 localTransportPresenterForUfc != presenter) return false;
             localTransportPresenterForUfc = presenter;
+            localTransportPresenterCanonicalForUfc = canonicalUrl;
+            localTransportPresenterWatchesLoadsForUfc = watchLoads;
+            return true;
+        }
+
+        bool HasLocalTransportPresenterForUfc(VRCUrl canonicalUrl) =>
+            Utilities.IsValid(localTransportPresenterForUfc) && localTransportPresenterForUfc.enabled &&
+            localTransportPresenterForUfc.gameObject.activeInHierarchy && !VRCUrl.IsNullOrEmpty(canonicalUrl) &&
+            !VRCUrl.IsNullOrEmpty(localTransportPresenterCanonicalForUfc) && canonicalUrl.Equals(localTransportPresenterCanonicalForUfc);
+
+        bool WatchesLocalTransportLoadForUfc(VRCUrl canonicalUrl) =>
+            localTransportPresenterWatchesLoadsForUfc && HasLocalTransportPresenterForUfc(canonicalUrl);
+
+        void NotifyLocalTransportPresenterForUfc(string eventName) {
+            if (HasLocalTransportPresenterForUfc(localUrl)) localTransportPresenterForUfc.SendCustomEvent(eventName);
+        }
+
+        /// <summary>Adopt a matching load already issued by Core, without a second SDK load.</summary>
+        public int AdoptLocalTransportForPresenterForUfc() {
+            if (!WatchesLocalTransportLoadForUfc(localUrl) || !Utilities.IsValid(activeHandler)) return 0;
+            var video = VideoTransportForUfc(activeHandler);
+            if (!Utilities.IsValid(video)) return 0;
+            if (!localTransportActiveForUfc && !isLoading &&
+                (state != PAUSED || !video.IsReady ||
+                (Mathf.Abs(video.Time - SharedTargetTimeForUfc) <= 0.1F && Utilities.IsValid(video.Texture)))) return 0;
+            if (!localTransportActiveForUfc) {
+                if (state == LOADING) { if (!BeginInitialTransportForUfc()) return 0; }
+                else if (BeginLocalTransportForUfc() == 0) return 0;
+                localTransportRouteManagedForUfc = true;
+                video.AdoptLocalTransportLoadForUfc(localTransportGenerationForUfc);
+                localTransportReadyForUfc = video.IsReady;
+            }
+            NotifyLocalTransportPresenterForUfc("_OnLocalTransportBeginForUfc");
+            return localTransportGenerationForUfc;
+        }
+
+        bool SetPausedProgressForPresenterForUfc(float seconds) {
+            if (state != PAUSED || !WatchesLocalTransportLoadForUfc(localUrl) ||
+                !Utilities.IsValid(activeHandler) || !activeHandler.IsReady || float.IsNaN(seconds) || float.IsInfinity(seconds)) return false;
+            var video = VideoTransportForUfc(activeHandler);
+            if (!Utilities.IsValid(video) || BeginLocalTransportForUfc() == 0) return false;
+            localTransportRouteManagedForUfc = true;
+            video.AdoptLocalTransportLoadForUfc(localTransportGenerationForUfc);
+            localTransportReadyForUfc = video.IsReady;
+            SetSharedTimeDuringLocalTransportForUfc(seconds);
+            NotifyLocalTransportPresenterForUfc("_OnLocalTransportBeginForUfc");
             return true;
         }
 
@@ -130,6 +181,7 @@ namespace JLChnToZ.VRC.VVMW {
             isError = false;
             loadingUrl = localUrl;
             video.PrepareLocalTransportLoadForUfc(localTransportGenerationForUfc);
+            NotifyLocalTransportPresenterForUfc("_OnLocalTransportBeginForUfc");
             video.LoadUrl(localUrl, true);
             return localTransportGenerationForUfc;
         }
@@ -140,22 +192,26 @@ namespace JLChnToZ.VRC.VVMW {
         }
 
         void PrepareMappedInitialLoadForUfc() {
-            if (!IsMappedTransportForUfc()) return;
+            if (!IsMappedTransportForUfc() && !WatchesLocalTransportLoadForUfc(localUrl)) return;
             state = LOADING;
             if (!BeginInitialTransportForUfc()) return;
             localTransportRouteManagedForUfc = true;
-            ((VideoPlayerHandler)activeHandler).PrepareLocalTransportLoadForUfc(localTransportGenerationForUfc);
+            var video = (VideoPlayerHandler)activeHandler;
+            if (video.CanReuseLocalTransportForUfc(localUrl)) video.AdoptLocalTransportLoadForUfc(localTransportGenerationForUfc);
+            else video.PrepareLocalTransportLoadForUfc(localTransportGenerationForUfc);
+            NotifyLocalTransportPresenterForUfc("_OnLocalTransportBeginForUfc");
         }
 
         void PrepareMappedReceivedLoadForUfc(VRCUrl canonicalUrl) {
             var video = VideoTransportForUfc(activeHandler);
-            if (!Utilities.IsValid(video) || !video.HasLocalTransportUrlForUfc(canonicalUrl)) return;
+            if (!Utilities.IsValid(video) || (!video.HasLocalTransportUrlForUfc(canonicalUrl) && !WatchesLocalTransportLoadForUfc(canonicalUrl))) return;
             localUrl = canonicalUrl;
             if (state == LOADING) { if (!BeginInitialTransportForUfc()) return; }
             else if (BeginLocalTransportForUfc() == 0) return;
             localTransportDurationForUfc = 0;
             localTransportRouteManagedForUfc = true;
             video.PrepareLocalTransportLoadForUfc(localTransportGenerationForUfc);
+            NotifyLocalTransportPresenterForUfc("_OnLocalTransportBeginForUfc");
         }
 
         bool FinishMappedInitialReadyForUfc() {
@@ -324,12 +380,14 @@ namespace JLChnToZ.VRC.VVMW {
         void InvalidateLocalTransportAuthorityForUfc() {
             if (!localTransportActiveForUfc) return;
             int oldGeneration = localTransportGenerationForUfc;
+            bool prepared = localTransportReadyForUfc && Utilities.IsValid(activeHandler) && activeHandler.IsReady && !isError;
             // Keep publication protected during a handoff; invalidate the old caller's write token.
             localTransportGenerationForUfc++;
             localTransportAlignedRevisionForUfc = -1;
-            localTransportReadyForUfc = false;
+            localTransportReadyForUfc = prepared;
             var video = VideoTransportForUfc(localTransportHandlerForUfc);
             if (localTransportRouteManagedForUfc && Utilities.IsValid(video)) video.RetagLocalTransportLoadForUfc(oldGeneration, localTransportGenerationForUfc);
+            NotifyLocalTransportPresenterForUfc("_OnLocalTransportAuthorityChangedForUfc");
         }
     }
 }
