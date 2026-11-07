@@ -28,6 +28,33 @@
 не создаются установщиком. Специфичные для мира права и интерфейс подключаются к API;
 вторую реализацию загрузки/часов/коррекции в world glue добавлять не требуется.
 
+## Локальный каталог (T122)
+
+`SourceMirrorCatalog` добавляет локальный проверяемый снимок текущего фильма:
+1–3 готовых VRCUrl, стабильные ID, подписи, версию и defensive copies. Он не
+синхронизируется и не публикует данные; `NetworkPublicationEnabled` всегда false.
+`BindLocalContext` получает только явно предоставленный локальный контекст.
+Это ещё не shared playback identity: настоящий Core/network binding — отдельный T123.
+Установщик не создаёт каталог автоматически и не заменяет авторизацию мира.
+
+После локального Bind/Commit задайте `controller.sourceCatalog`. `SelectSource`,
+`UsePrimary` и `RetrySelected` принимают актуальные Version/ContextPlaybackId,
+проверяют PC/Core context и передают URL прежнему Core transport. При Off,
+disabled или незавершённом handback они отказывают без включения/загрузки.
+Retry читает актуальный URL выбранного ID; удалённый ID остаётся Unavailable.
+SelectedSourceId обозначает принятое намерение, ActiveSourceId — совпавший
+готовый physical receipt после picture handoff, а не requested URL.
+
+Правка подписей/порядка/URL в локальном снимке не загружает видео и не меняет
+уже принятую selection receipt. Смена film context очищает чужой intent без
+transport-команд. Один каталог обслуживает один controller; повторная регистрация
+другого controller отклоняется. Общая шкала/команды/сроки подготовки кадра не менялись.
+
+Catalog program asset имеет собственный стабильный GUID; при ручном добавлении
+каталога его компонент также нужно снять перед физическим исключением папки.
+Editor Install/Remove пока владеет только создаваемой им прежней output-композицией.
+Этот локальный API не является готовым сетевым каталогом, Auto или production UI.
+
 ## Runtime On / Off
 
 `_TurnOn` включает композицию; `_SelectMirror` использует `requestedPhysical` для
@@ -67,7 +94,7 @@ runner накладывает закреплённые исходники на �
 Сначала выключите/снимите композицию, сохраните сцену и закройте редактор. Обновляйте
 весь проверенный пакет вместе с `.meta`, затем выполните compile, проверку графа и
 приёмку Off/On/Remove/ordinary playback на копии сцены. Не переносите сгенерированные
-`Assets/SerializedUdonPrograms` из другого проекта. Два program assets принадлежат
+`Assets/SerializedUdonPrograms` из другого проекта. Три program assets принадлежат
 пакету; их GUID стабильны, compiled programs создаёт UdonSharp текущего проекта.
 
 При переходе с `1.8.2` проверьте ограничения версий в собственных asmdef: строгое

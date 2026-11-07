@@ -42,7 +42,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
         }
 
         public static void ValidatePrograms() {
-            foreach (var type in new[] { typeof(SourceMirrorController), typeof(SourceMirrorOutputGate) }) {
+            foreach (var type in new[] { typeof(SourceMirrorController), typeof(SourceMirrorOutputGate), typeof(SourceMirrorCatalog) }) {
                 var script = AssetDatabase.LoadAssetAtPath<MonoScript>(ProgramFolder + type.Name + ".cs");
                 var program = AssetDatabase.LoadAssetAtPath<UdonSharpProgramAsset>(ProgramFolder + type.Name + ".asset");
                 Need(script && script.GetClass() == type && program && program.sourceCsScript == script,

@@ -7,7 +7,7 @@ namespace JLChnToZ.VRC.VVMW {
     // Optional, finite transition coordinator. Core owns every playback/seek command.
     // No Update loop, alternate clock, retry, predictive lead or secondary decoder.
     [UdonBehaviourSyncMode(BehaviourSyncMode.NoVariableSync)]
-    public class SourceMirrorController : UdonSharpBehaviour {
+    public partial class SourceMirrorController : UdonSharpBehaviour {
         public Core core;
         public VRCUrl canonical, requestedPhysical;
         public Renderer[] videoOnlyRenderers;

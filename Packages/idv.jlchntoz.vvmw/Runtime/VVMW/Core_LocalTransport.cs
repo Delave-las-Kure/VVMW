@@ -48,6 +48,13 @@ namespace JLChnToZ.VRC.VVMW {
         public bool IsLocalTransportReadyForUfc => localTransportReadyForUfc &&
             Utilities.IsValid(activeHandler) && activeHandler.IsReady;
         public bool HasLocalTransportErrorForUfc => isError;
+        /// <summary>The ready active video handler's physical load receipt; never a requested URL.</summary>
+        public VRCUrl LocalTransportLoadedPhysicalUrlForUfc {
+            get {
+                var video = VideoTransportForUfc(activeHandler);
+                return Utilities.IsValid(video) && video.IsReady ? video.LoadedPhysicalUrlForUfc : null;
+            }
+        }
         public byte SharedStateForUfc => state;
         public bool LocalTransportRequestAcceptedForUfc => localTransportRequestAcceptedForUfc;
         public float LocalTransportPictureToleranceForUfc => state == PAUSED ? 0.08F : timeDriftDetectThreshold;
