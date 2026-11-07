@@ -20,6 +20,14 @@ function Get-BlobHash([byte[]]$Bytes){
     try{$hash.AppendData([Text.Encoding]::ASCII.GetBytes("blob $($Bytes.Length)`0"));$hash.AppendData($Bytes);return [Convert]::ToHexString($hash.GetHashAndReset()).ToLowerInvariant()}
     finally{$hash.Dispose()}
 }
+function Read-GitBlob([string]$ObjectId){
+    $start=[Diagnostics.ProcessStartInfo]::new('git')
+    $start.UseShellExecute=$false;$start.CreateNoWindow=$true;$start.RedirectStandardOutput=$true;$start.RedirectStandardError=$true
+    foreach($argument in @('-c',"safe.directory=$releaseRoot",'-C',$releaseRoot,'cat-file','blob',$ObjectId)){$start.ArgumentList.Add($argument)}
+    $process=[Diagnostics.Process]::Start($start);$errors=$process.StandardError.ReadToEndAsync();$buffer=[IO.MemoryStream]::new()
+    try{$process.StandardOutput.BaseStream.CopyTo($buffer);$process.WaitForExit();if($process.ExitCode -ne 0){throw $errors.GetAwaiter().GetResult()};return ,$buffer.ToArray()}
+    finally{$process.Dispose();$buffer.Dispose()}
+}
 $releaseCommit=Read-Git -Arguments @('rev-parse','HEAD')
 $releaseChanges=@(Read-Git -Arguments @('diff','--name-only','1.8.2','HEAD','--',$releasePackage))
 if(($releaseChanges -join '|') -ne "$releasePackage/Runtime/VVMW/Core_Timing.cs|$releasePackage/package.json"){throw 'Release contains unexpected package changes'}
@@ -40,7 +48,14 @@ foreach($record in $releaseFiles){
         $null=[IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($target));[IO.File]::WriteAllBytes($target,$bytes)
         $releaseVerified++;$found=$true;break
     }
-    if(-not $found){throw "No exact committed blob for $relative ($expected)"}
+    if(-not $found){
+        # The installed copy may contain Unity-regenerated assets. Read that exact Git blob instead.
+        $bytes=Read-GitBlob $expected
+        if((Get-BlobHash $bytes) -ne $expected){throw "Git blob mismatch for $relative"}
+        $target=Join-Path $releasePayload $relative
+        $null=[IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($target));[IO.File]::WriteAllBytes($target,$bytes)
+        $releaseVerified++
+    }
 }
 $releaseZip=Join-Path $OutputPath 'idv.jlchntoz.vvmw-1.8.2-ufc.1.zip'
 $zip=[IO.Compression.ZipFile]::Open($releaseZip,[IO.Compression.ZipArchiveMode]::Create)
