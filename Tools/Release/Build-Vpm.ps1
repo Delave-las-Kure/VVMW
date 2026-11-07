@@ -8,11 +8,12 @@ param(
 )
 $ErrorActionPreference='Stop'
 $releaseRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+$releaseSafe=$releaseRoot.Replace('\','/')
 $releasePackage='Packages/idv.jlchntoz.vvmw'
 $releaseManifest=Get-Content -LiteralPath (Join-Path $releaseRoot "$releasePackage/package.json") -Raw | ConvertFrom-Json
 if($releaseManifest.name -ne 'idv.jlchntoz.vvmw' -or $releaseManifest.version -ne '1.8.2-ufc.1'){throw 'Unrecognized release identity'}
 function Read-Git([string[]]$Arguments){
-    $value=& git -c "safe.directory=$releaseRoot" -C $releaseRoot @Arguments
+    $value=& git -c "safe.directory=$releaseSafe" -C $releaseRoot @Arguments
     if($LASTEXITCODE -ne 0){throw ('Git failed: '+($Arguments -join ' '))};return $value
 }
 function Get-BlobHash([byte[]]$Bytes){
@@ -23,7 +24,7 @@ function Get-BlobHash([byte[]]$Bytes){
 function Read-GitBlob([string]$ObjectId){
     $start=[Diagnostics.ProcessStartInfo]::new('git')
     $start.UseShellExecute=$false;$start.CreateNoWindow=$true;$start.RedirectStandardOutput=$true;$start.RedirectStandardError=$true
-    foreach($argument in @('-c',"safe.directory=$releaseRoot",'-C',$releaseRoot,'cat-file','blob',$ObjectId)){$start.ArgumentList.Add($argument)}
+    foreach($argument in @('-c',"safe.directory=$releaseSafe",'-C',$releaseRoot,'cat-file','blob',$ObjectId)){$start.ArgumentList.Add($argument)}
     $process=[Diagnostics.Process]::Start($start);$errors=$process.StandardError.ReadToEndAsync();$buffer=[IO.MemoryStream]::new()
     try{$process.StandardOutput.BaseStream.CopyTo($buffer);$process.WaitForExit();if($process.ExitCode -ne 0){throw $errors.GetAwaiter().GetResult()};return ,$buffer.ToArray()}
     finally{$process.Dispose();$buffer.Dispose()}

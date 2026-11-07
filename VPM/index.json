@@ -1,0 +1,36 @@
+{
+  "name": "UFC VizVid Stable",
+  "id": "world.ufc.vvmw",
+  "url": "https://raw.githubusercontent.com/Delave-las-Kure/VVMW/ufc/cinema-stable/VPM/index.json",
+  "author": "Delave-las-Kure",
+  "packages": {
+    "idv.jlchntoz.vvmw": {
+      "versions": {
+        "1.8.2-ufc.1": {
+          "name": "idv.jlchntoz.vvmw",
+          "displayName": "VizVid (UFC Stable)",
+          "version": "1.8.2-ufc.1",
+          "unity": "2019.4",
+          "description": "UFC stable fork of VizVid 1.8.2 with the paused playback clock correction.",
+          "license": "MIT",
+          "vrchatVersion": "2022.1.1",
+          "documentationUrl": "https://xtlcdn.github.io/VizVid/docs/",
+          "changelogUrl": "https://xtlcdn.github.io/VizVid/changelog/",
+          "hideInEditor": false,
+          "vpmDependencies": {
+            "com.vrchat.worlds": "3.x.x >=3.10.2",
+            "idv.jlchntoz.vrcw-foundation": "0.x.x >=0.0.65",
+            "idv.jlchntoz.lazyswitch": "0.x.x >=0.8.3"
+          },
+          "author": {
+            "name": "Jeremy Lam aka. Vistanz",
+            "email": "me@moka-rin.moe",
+            "url": "https://xtl.booth.pm"
+          },
+          "url": "https://github.com/Delave-las-Kure/VVMW/releases/download/ufc-v1.8.2-1/idv.jlchntoz.vvmw-1.8.2-ufc.1.zip",
+          "zipSHA256": "da381a90937dc2692cca872abb04ea55f41a3f377066f6646507288c03738af8"
+        }
+      }
+    }
+  }
+}
