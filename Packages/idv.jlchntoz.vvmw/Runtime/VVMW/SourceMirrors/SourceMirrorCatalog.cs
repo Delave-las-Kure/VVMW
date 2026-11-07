@@ -12,6 +12,7 @@ namespace JLChnToZ.VRC.VVMW {
     [DisallowMultipleComponent]
     [AddComponentMenu("VizVid/Source Mirror Catalog (Local)")]
     public class SourceMirrorCatalog : UdonSharpBehaviour {
+        public SourceMirrorCatalogAuthority authority;
         public const int Accepted = 0, Unchanged = 1, NotContextReady = 2,
             InvalidContext = 3, InvalidSnapshot = 4, UnsupportedSchema = 5,
             PayloadTooLarge = 6, CatalogChanged = 7, PlaybackChanged = 8,
@@ -31,9 +32,11 @@ namespace JLChnToZ.VRC.VVMW {
         string[] ids = new string[0], labels = new string[0];
         VRCUrl[] urls = new VRCUrl[0];
         SourceMirrorController selectionObserver;
+        bool networkManaged;
 
         public int Result => result;
-        public bool NetworkPublicationEnabled => false;
+        public bool NetworkPublicationEnabled => Utilities.IsValid(authority) && authority.IsReadyForPublication;
+        public bool IsNetworkManaged => networkManaged || Utilities.IsValid(authority);
         public bool HasLocalContext => !string.IsNullOrEmpty(contextPlaybackId);
         public string ContextPlaybackId => contextPlaybackId;
         public VRCUrl ContextCanonical => contextPc;
@@ -43,8 +46,14 @@ namespace JLChnToZ.VRC.VVMW {
         public string FilmId => film;
         public string CompatibilityTag => compatibility;
         public long Revision => revision;
+        public bool HasAcceptedSnapshot => hasSnapshot;
+        public string SnapshotPlaybackId => playback;
+        public VRCUrl SnapshotCanonical => pc;
+        public VRCUrl SnapshotMobileCanonical => mobile;
+        public byte SnapshotBackend => backend;
         public bool IsCurrent => enabled && gameObject.activeInHierarchy && hasSnapshot && HasLocalContext &&
-            playback == contextPlaybackId && SameKey(pc, mobile, backend, contextPc, contextMobile, contextBackend);
+            playback == contextPlaybackId && SameKey(pc, mobile, backend, contextPc, contextMobile, contextBackend) &&
+            (!IsNetworkManaged || (Utilities.IsValid(authority) && authority.MatchesCoreContext(playback, pc, mobile, backend)));
         public int SourceCount => IsCurrent ? ids.Length : 0;
 
         bool AllowLocalMutation() {
@@ -53,10 +62,20 @@ namespace JLChnToZ.VRC.VVMW {
             return true;
         }
 
+        bool AllowFoundationWrite() {
+            if (!AllowLocalMutation()) return false;
+            if (IsNetworkManaged) { result = LocalOnly; return false; }
+            return true;
+        }
+
         // T123 will provide an authoritative Core binding. Supplying a token here
         // does not make it a synchronized identity; there is deliberately no watcher.
         public bool BindLocalContext(string playbackId, VRCUrl canonicalPc, VRCUrl canonicalMobile, byte playerType) {
-            if (!AllowLocalMutation()) return false;
+            if (!AllowFoundationWrite()) return false;
+            return BindContext(playbackId, canonicalPc, canonicalMobile, playerType);
+        }
+
+        bool BindContext(string playbackId, VRCUrl canonicalPc, VRCUrl canonicalMobile, byte playerType) {
             if (!ValidToken(playbackId) || VRCUrl.IsNullOrEmpty(canonicalPc) || playerType == 0) {
                 result = InvalidContext; return false;
             }
@@ -77,7 +96,11 @@ namespace JLChnToZ.VRC.VVMW {
         }
 
         public void _ClearLocalContext() {
-            if (!AllowLocalMutation()) return;
+            if (!AllowFoundationWrite()) return;
+            ClearContext();
+        }
+
+        void ClearContext() {
             contextPlaybackId = ""; contextPc = contextMobile = null; contextBackend = 0;
             NotifySelectionContext();
             result = NotContextReady; // Retain the immutable last accepted read cache.
@@ -85,7 +108,7 @@ namespace JLChnToZ.VRC.VVMW {
 
         public bool CommitLocalDraft(string expectedVersion, string expectedPlaybackId, string filmId,
             string compatibilityTag, string[] sourceIds, string[] sourceLabels, VRCUrl[] sourceUrls) {
-            if (!AllowLocalMutation() || !ValidateExpected(expectedVersion, expectedPlaybackId)) return false;
+            if (!AllowFoundationWrite() || !ValidateExpected(expectedVersion, expectedPlaybackId)) return false;
             if (!ValidateSources(filmId, compatibilityTag, sourceIds, sourceLabels, sourceUrls)) return false;
             int bytes = PayloadBytes(filmId, compatibilityTag, sourceIds, sourceLabels, sourceUrls) +
                 TextBytes(expectedVersion) + TextBytes(expectedPlaybackId);
@@ -100,16 +123,25 @@ namespace JLChnToZ.VRC.VVMW {
         public bool AcceptLocalSnapshot(int schemaVersion, string writerFence, long catalogRevision,
             string expectedVersion, string playbackId, string filmId, string compatibilityTag,
             string[] sourceIds, string[] sourceLabels, VRCUrl[] sourceUrls) {
-            if (!AllowLocalMutation() || !ValidateExpected(expectedVersion, playbackId)) return false;
+            if (!AllowFoundationWrite()) return false;
+            return AcceptSnapshot(schemaVersion, writerFence, catalogRevision, expectedVersion, playbackId,
+                filmId, compatibilityTag, sourceIds, sourceLabels, sourceUrls, false);
+        }
+
+        bool AcceptSnapshot(int schemaVersion, string writerFence, long catalogRevision,
+            string expectedVersion, string playbackId, string filmId, string compatibilityTag,
+            string[] sourceIds, string[] sourceLabels, VRCUrl[] sourceUrls, bool newEpoch) {
+            if (!ValidateExpected(expectedVersion, playbackId)) return false;
             if (schemaVersion != 1) { result = UnsupportedSchema; return false; }
             if (!ValidToken(writerFence) || writerFence.Length > 96 || catalogRevision <= 0) { result = InvalidSnapshot; return false; }
             if (!ValidateSources(filmId, compatibilityTag, sourceIds, sourceLabels, sourceUrls)) return false;
             int bytes = PayloadBytes(filmId, compatibilityTag, sourceIds, sourceLabels, sourceUrls) +
                 TextBytes(writerFence) + TextBytes(playbackId) + UrlBytes(contextPc) + UrlBytes(contextMobile);
             if (bytes > SnapshotBudget) { result = PayloadTooLarge; return false; }
-            if (hasSnapshot && writerFence != writer) { result = WriterChanged; return false; }
-            if (hasSnapshot && catalogRevision < revision) { result = CatalogChanged; return false; }
-            if (hasSnapshot && catalogRevision == revision) {
+            bool writerChanged = hasSnapshot && writerFence != writer;
+            if (writerChanged && !newEpoch) { result = WriterChanged; return false; }
+            if (hasSnapshot && !writerChanged && catalogRevision < revision) { result = CatalogChanged; return false; }
+            if (hasSnapshot && !writerChanged && catalogRevision == revision) {
                 bool same = playback == playbackId && film == filmId && compatibility == compatibilityTag &&
                     SameKey(pc, mobile, backend, contextPc, contextMobile, contextBackend) &&
                     SameSources(sourceIds, sourceLabels, sourceUrls);
@@ -137,6 +169,43 @@ namespace JLChnToZ.VRC.VVMW {
             NotifySelectionContext();
             return true;
         }
+
+        // Only the configured package arbiter opens this synchronous apply scope.
+        // Never defer an authenticated RPC just to discard NetworkCalling context.
+        bool Trusted(SourceMirrorCatalogAuthority source) {
+            if (!enabled || !gameObject.activeInHierarchy || !Utilities.IsValid(authority) ||
+                source != authority || !source.IsApplyingCatalog) return false;
+            networkManaged = true;
+            return true;
+        }
+
+        public bool BindSharedContext(SourceMirrorCatalogAuthority source, string playbackId,
+            VRCUrl canonicalPc, VRCUrl canonicalMobile, byte playerType) =>
+            Trusted(source) && BindContext(playbackId, canonicalPc, canonicalMobile, playerType);
+
+        public void ClearSharedContext(SourceMirrorCatalogAuthority source) {
+            if (Trusted(source)) ClearContext();
+        }
+
+        public bool ValidateSharedDraft(SourceMirrorCatalogAuthority source, string expectedVersion,
+            string playbackId, string filmId, string tag, string[] sourceIds, string[] sourceLabels, VRCUrl[] sourceUrls) {
+            if (!Trusted(source) || !ValidateExpected(expectedVersion, playbackId) ||
+                !ValidateSources(filmId, tag, sourceIds, sourceLabels, sourceUrls)) return false;
+            if (PayloadBytes(filmId, tag, sourceIds, sourceLabels, sourceUrls) +
+                TextBytes(expectedVersion) + TextBytes(playbackId) > DraftBudget) { result = PayloadTooLarge; return false; }
+            if (hasSnapshot) {
+                bool sameFilmKey = SameKey(pc, mobile, backend, contextPc, contextMobile, contextBackend);
+                if ((sameFilmKey && film != filmId) || (!sameFilmKey && film == filmId) ||
+                    (sameFilmKey && !PreservesIds(sourceIds, sourceUrls))) { result = InvalidSnapshot; return false; }
+            }
+            result = Accepted; return true;
+        }
+
+        public bool AcceptSharedSnapshot(SourceMirrorCatalogAuthority source, string writerFence,
+            long catalogRevision, string playbackId, string filmId, string tag,
+            string[] sourceIds, string[] sourceLabels, VRCUrl[] sourceUrls, bool newEpoch) =>
+            Trusted(source) && AcceptSnapshot(1, writerFence, catalogRevision, version, playbackId,
+                filmId, tag, sourceIds, sourceLabels, sourceUrls, newEpoch);
 
         public bool RegisterLocalSelectionObserver(SourceMirrorController observer) {
             if (!AllowLocalMutation() || !Utilities.IsValid(observer) || observer.sourceCatalog != this) return false;

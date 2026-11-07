@@ -41,8 +41,9 @@ namespace JLChnToZ.VRC.VVMW {
         }
         bool SameFilm() => !VRCUrl.IsNullOrEmpty(core.Url) && core.Url.Equals(canonical);
 
-        void Start() { if (observeCoreLoads) Attach(); }
+        void Start() { RegisterCatalogObserver(); if (observeCoreLoads) Attach(); }
         void OnEnable() {
+            RegisterCatalogObserver();
             if (pending) Queue();
             if (observeCoreLoads) Attach();
         }

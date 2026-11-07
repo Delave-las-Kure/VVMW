@@ -32,9 +32,10 @@
 
 `SourceMirrorCatalog` добавляет локальный проверяемый снимок текущего фильма:
 1–3 готовых VRCUrl, стабильные ID, подписи, версию и defensive copies. Он не
-синхронизируется и не публикует данные; `NetworkPublicationEnabled` всегда false.
+синхронизируется и не публикует данные самостоятельно. Без network authority
+`NetworkPublicationEnabled` false.
 `BindLocalContext` получает только явно предоставленный локальный контекст.
-Это ещё не shared playback identity: настоящий Core/network binding — отдельный T123.
+Сам local token не является shared playback identity; T123 binding описан ниже.
 Установщик не создаёт каталог автоматически и не заменяет авторизацию мира.
 
 После локального Bind/Commit задайте `controller.sourceCatalog`. `SelectSource`,
@@ -54,6 +55,40 @@ Catalog program asset имеет собственный стабильный GUI
 каталога его компонент также нужно снять перед физическим исключением папки.
 Editor Install/Remove пока владеет только создаваемой им прежней output-композицией.
 Этот локальный API не является готовым сетевым каталогом, Auto или production UI.
+
+## Общий каталог (T123, candidate)
+
+Core сохраняет UUID и immutable post-filter PC/effective-mobile/configured-backend
+заголовок каждого принятого PlayUrl в том же snapshot. Это metadata, не новая шкала.
+Loop, LocalSync и личные операции не меняют ID. Optional generic observer не даёт
+Core зависимости от optional типов; без функции ordinary playback остаётся.
+
+Вручную добавьте `SourceMirrorCatalogAuthority`, задайте Core, catalog и собственный
+`SourceMirrorCatalogAccessPolicy`, а в catalog — обратную authority-ссылку.
+`enablePublication` по умолчанию false. Проверьте граф через
+`SourceMirrorAuthoring.ValidateCatalogAuthority`; установщик output-композиции не
+назначает права мира автоматически. В network-managed режиме старые T122 local
+write API закрыты; Select/Retry остаются личными.
+
+`RequestPublishCurrentCatalog` передаёт ровно восемь typed параметров. Проверка
+прав использует actual network caller и актуальную role revision на авторитетной
+копии provider; SDK owner не получает права ведущего автоматически. Draft CAS,
+whole-snapshot validation/copy и reentrant guards предшествуют commit. Pending
+request, PublicationStatus и CatalogStatus различаются. Reply/serialization success
+не означает remote ACK; подтверждение требует matching accepted snapshot.
+
+После внезапной потери writer cache/просмотр сохраняются, writes закрыты до нового
+обычного запуска с authenticated recovery marker и нового authorized Apply.
+Cooperative handoff использует freeze/exact-base offer/ACK/authenticated Commit
+перед передачей ownership, не локальное
+`maxRevision+1`. Истёкший offer не открывает writes. Невиданный последним writer
+commit не объявляется восстановленным. Both packet orders и late readiness имеют
+bounded reconciliation; metadata не вызывает Play/Seek/Reload.
+
+Для физического исключения сначала снимите вручную добавленные authority/policy и
+catalog components и ссылки world glue. Они не принадлежат старому output Remove.
+Новые сетевые claims требуют actual Photon/ownership/byteCount/unavailable-primary
+проверки. Managed/ClientSim не заменяют её; main install/Auto/release не включены.
 
 ## Runtime On / Off
 
@@ -94,7 +129,7 @@ runner накладывает закреплённые исходники на �
 Сначала выключите/снимите композицию, сохраните сцену и закройте редактор. Обновляйте
 весь проверенный пакет вместе с `.meta`, затем выполните compile, проверку графа и
 приёмку Off/On/Remove/ordinary playback на копии сцены. Не переносите сгенерированные
-`Assets/SerializedUdonPrograms` из другого проекта. Три program assets принадлежат
+`Assets/SerializedUdonPrograms` из другого проекта. Четыре program assets принадлежат
 пакету; их GUID стабильны, compiled programs создаёт UdonSharp текущего проекта.
 
 При переходе с `1.8.2` проверьте ограничения версий в собственных asmdef: строгое

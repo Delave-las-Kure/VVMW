@@ -30,9 +30,10 @@ namespace JLChnToZ.VRC.VVMW {
         }
 
         bool ReceiptMatchesContext() => Utilities.IsValid(core) && Utilities.IsValid(sourceCatalog) &&
+            sourceCatalog.IsCurrent &&
             !string.IsNullOrEmpty(selectedSourceId) && !VRCUrl.IsNullOrEmpty(selectedPhysical) &&
             SelectedFilmMatchesContext() && sourceCatalog.ContextPlaybackId == selectedPlaybackId &&
-            sourceCatalog.FilmId == selectedFilmId && sourceCatalog.ContextBackend == core.ActivePlayer &&
+            sourceCatalog.FilmId == selectedFilmId && sourceCatalog.ContextBackend == CatalogBackend() &&
             !VRCUrl.IsNullOrEmpty(sourceCatalog.ContextCanonical) && !VRCUrl.IsNullOrEmpty(core.Url) &&
             sourceCatalog.ContextCanonical.Equals(core.Url) && SameFilm();
 
@@ -44,9 +45,31 @@ namespace JLChnToZ.VRC.VVMW {
 
         // Metadata-only invalidation. Never cancels/restarts a physical load.
         public void CatalogContextChanged(SourceMirrorCatalog changedCatalog) {
-            if (NetworkCalling.InNetworkCall || changedCatalog != sourceCatalog || SelectedFilmMatchesContext()) return;
+            if (changedCatalog != sourceCatalog || (NetworkCalling.InNetworkCall &&
+                (!Utilities.IsValid(sourceCatalog.authority) || !sourceCatalog.authority.IsApplyingCatalog))) return;
+            if (Utilities.IsValid(sourceCatalog.authority) && sourceCatalog.authority.core == core &&
+                sourceCatalog.authority.MatchesCoreContext(sourceCatalog.ContextPlaybackId,
+                    sourceCatalog.ContextCanonical, sourceCatalog.ContextMobileCanonical, sourceCatalog.ContextBackend)) {
+                // Update only the existing watch registration before Core's normal load.
+                // Calling Attach/Adopt here would turn a metadata callback into playback.
+                canonical = core.Url;
+                if (enabled && !mirrorsOff && !disabling && observeCoreLoads && Configured()) Register();
+            }
+            if (SelectedFilmMatchesContext()) {
+                if (Utilities.IsValid(sourceCatalog.authority) && sourceCatalog.IsCurrent)
+                    selectedPlaybackId = sourceCatalog.ContextPlaybackId;
+                return;
+            }
             selectedSourceId = selectedFilmId = selectedPlaybackId = selectedVersion = "";
             selectedPhysical = selectedCanonical = selectedMobile = null; selectedBackend = 0;
+        }
+
+        byte CatalogBackend() => Utilities.IsValid(sourceCatalog.authority) ? core.ConfiguredPlayerTypeForUfc : core.ActivePlayer;
+
+        void RegisterCatalogObserver() {
+            if (NetworkCalling.InNetworkCall || !Utilities.IsValid(sourceCatalog) ||
+                !Utilities.IsValid(sourceCatalog.authority) || sourceCatalog.authority.core != core) return;
+            if (sourceCatalog.RegisterLocalSelectionObserver(this)) CatalogContextChanged(sourceCatalog);
         }
 
         bool CanSelectCatalogSource() {
@@ -54,11 +77,23 @@ namespace JLChnToZ.VRC.VVMW {
             if (!enabled || !gameObject.activeInHierarchy || mirrorsOff || disabling) {
                 selectionResult = SourceMirrorCatalog.Disabled; return false;
             }
+            // First selection can happen while the primary is still loading or failed.
+            // Bind the configured network record before the legacy authored-canonical check;
+            // no primary Ready, Attach/Adopt or extra native load is required here.
+            if (Utilities.IsValid(core) && Utilities.IsValid(sourceCatalog) &&
+                Utilities.IsValid(sourceCatalog.authority) && sourceCatalog.authority.core == core &&
+                sourceCatalog.IsCurrent) {
+                if (!sourceCatalog.RegisterLocalSelectionObserver(this)) {
+                    selectionResult = SourceMirrorCatalog.NotContextReady; return false;
+                }
+                CatalogContextChanged(sourceCatalog);
+            }
 #if UNITY_ANDROID || UNITY_IOS
             selectionResult = SourceMirrorCatalog.UnsupportedPlatform; return false;
 #else
             if (!Utilities.IsValid(core) || !Utilities.IsValid(sourceCatalog) || !sourceCatalog.IsCurrent ||
-                core.SharedStateForUfc == 0 || !SameFilm() || sourceCatalog.ContextBackend != core.ActivePlayer ||
+                core.SharedStateForUfc == 0 || !SameFilm() || sourceCatalog.ContextBackend != CatalogBackend() ||
+                (Utilities.IsValid(sourceCatalog.authority) && sourceCatalog.authority.core != core) ||
                 VRCUrl.IsNullOrEmpty(sourceCatalog.ContextCanonical) ||
                 !sourceCatalog.ContextCanonical.Equals(core.Url)) {
                 selectionResult = SourceMirrorCatalog.NotContextReady; return false;

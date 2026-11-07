@@ -42,7 +42,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
         }
 
         public static void ValidatePrograms() {
-            foreach (var type in new[] { typeof(SourceMirrorController), typeof(SourceMirrorOutputGate), typeof(SourceMirrorCatalog) }) {
+            foreach (var type in new[] { typeof(SourceMirrorController), typeof(SourceMirrorOutputGate), typeof(SourceMirrorCatalog), typeof(SourceMirrorCatalogAuthority) }) {
                 var script = AssetDatabase.LoadAssetAtPath<MonoScript>(ProgramFolder + type.Name + ".cs");
                 var program = AssetDatabase.LoadAssetAtPath<UdonSharpProgramAsset>(ProgramFolder + type.Name + ".asset");
                 Need(script && script.GetClass() == type && program && program.sourceCsScript == script,
@@ -85,6 +85,21 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                 Need(other.videoOnlyRenderers == null || !other.videoOnlyRenderers.Intersect(screens).Any(), "Two controllers share a video renderer.");
                 Need(other.audioGates == null || !other.audioGates.Intersect(gates).Any(), "Two controllers share an output gate.");
             }
+            ValidatePrograms();
+            if (controller.sourceCatalog && controller.sourceCatalog.authority)
+                ValidateCatalogAuthority(controller.sourceCatalog.authority);
+        }
+
+        public static void ValidateCatalogAuthority(SourceMirrorCatalogAuthority authority) {
+            Need(authority && authority.core && authority.catalog && authority.policy, "Choose catalog, Core and an explicit access policy.");
+            Need(authority.core.IsSynced && authority.catalog.authority == authority, "Catalog authority requires a synced Core and matching catalog back-reference.");
+            var scene = authority.core.gameObject.scene;
+            Need(authority.gameObject.scene == scene && authority.catalog.gameObject.scene == scene &&
+                authority.policy.gameObject.scene == scene, "Catalog graph must belong to the Core scene.");
+            Need(SceneObjects<SourceMirrorCatalogAuthority>().Count(x => x.core == authority.core) == 1,
+                "Only one catalog observer may bind a Core.");
+            Need(SceneObjects<SourceMirrorCatalogAuthority>().Count(x => x.catalog == authority.catalog) == 1,
+                "Only one network arbiter may own a catalog.");
             ValidatePrograms();
         }
 
@@ -190,6 +205,10 @@ namespace JLChnToZ.VRC.VVMW.Editors {
         public int callbackOrder => -100000;
         public void OnProcessScene(Scene scene, BuildReport report) {
             foreach (var root in scene.GetRootGameObjects())
+                foreach (var authority in root.GetComponentsInChildren<SourceMirrorCatalogAuthority>(true))
+                    try { SourceMirrorAuthoring.ValidateCatalogAuthority(authority); }
+                    catch (Exception ex) { throw new BuildFailedException("Invalid VizVid catalog authority: " + ex.Message); }
+            foreach (var root in scene.GetRootGameObjects())
                 foreach (var controller in root.GetComponentsInChildren<SourceMirrorController>(true))
                     try { SourceMirrorAuthoring.Validate(controller); }
                     catch (Exception ex) { throw new BuildFailedException("Invalid VizVid source mirrors: " + ex.Message); }
@@ -199,6 +218,9 @@ namespace JLChnToZ.VRC.VVMW.Editors {
     sealed class SourceMirrorConfigValidator : JLChnToZ.VRC.Foundation.Editors.IPreprocessor {
         public int Priority => 100;
         public void OnPreprocess(Scene scene) {
+            foreach (var root in scene.GetRootGameObjects())
+                foreach (var authority in root.GetComponentsInChildren<SourceMirrorCatalogAuthority>(true))
+                    SourceMirrorAuthoring.ValidateCatalogAuthority(authority);
             foreach (var root in scene.GetRootGameObjects())
                 foreach (var controller in root.GetComponentsInChildren<SourceMirrorController>(true))
                     SourceMirrorAuthoring.Validate(controller);
