@@ -86,6 +86,7 @@ namespace JLChnToZ.VRC.VVMW {
             // A seek jump is not ordinary buffering progress. Start the existing raw
             // comparison from the observed post-seek position, without estimating a lead.
             lastSyncRawTime = raw;
+            timeChangeRequested = false;
             isBuffering = false;
             return true;
         }

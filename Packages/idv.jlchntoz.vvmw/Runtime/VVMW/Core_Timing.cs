@@ -31,6 +31,8 @@ namespace JLChnToZ.VRC.VVMW {
         double syncLatency;
         float lastSyncRawTime;
         bool isBuffering;
+        float lastRequestedTime;
+        bool timeChangeRequested;
         bool isResyncTime;
         bool isCheckingRangeLoop;
         DateTime lastSyncTime;
@@ -49,10 +51,20 @@ namespace JLChnToZ.VRC.VVMW {
             get => Utilities.IsValid(activeHandler) ? activeHandler.Time : 0;
             private set {
                 if (IsRangeLooping) value = CalculateLoopTime(value);
-                activeHandler.Time = value;
-                lastSyncRawTime = value;
+                // SetTime may complete asynchronously. Compare future samples with
+                // an observed position, never with the requested target.
+                lastSyncRawTime = activeHandler.Time;
+                lastRequestedTime = value;
+                timeChangeRequested = true;
                 isBuffering = false; // Reset buffering state
+                activeHandler.Time = value;
             }
+        }
+
+        void ResetSyncTimeSamples() {
+            lastSyncRawTime = Utilities.IsValid(activeHandler) ? activeHandler.Time : 0;
+            timeChangeRequested = false;
+            isBuffering = false;
         }
 
         /// <summary>
@@ -174,6 +186,7 @@ namespace JLChnToZ.VRC.VVMW {
         /// Internal use only. Do not call this method.
         /// </summary>
         public override void OnOwnershipTransferred(VRCPlayerApi player) {
+            ResetSyncTimeSamples();
             InvalidateLocalTransportAuthorityForUfc();
             if (!player.isLocal) isLocalReloading = false;
             syncLatency = 0;
@@ -284,16 +297,22 @@ namespace JLChnToZ.VRC.VVMW {
                 // Do not align the time this case as it may cause current non-ready buffer to be discard and rebuffered
                 // causing the video to be stuck in buffering state.
                 bool isPlaying = activeHandler.IsPlaying;
+                // A paused decoder also needs time to finish a seek. A newer
+                // paused target or an explicit forced sync must still take effect.
+                if (timeChangeRequested && t2 == lastSyncRawTime && !isPlaying && !forced &&
+                    Mathf.Abs((IsRangeLooping ? CalculateLoopTime(t) : t) - lastRequestedTime) < timeDriftDetectThreshold)
+                    return;
                 if (!isPlaying || t2 != lastSyncRawTime) {
                     // If it was buffering, we shift the time a bit further, estimates user loading time for catching up
                     if (isBuffering) {
-                        if (isPlaying) {
+                        if (isPlaying && !timeChangeRequested) {
                             float tCatchup = t2 - lastSyncRawTime;
                             if (tCatchup > timeDriftDetectThreshold) t += tCatchup;
                         }
                         isBuffering = false;
                     }
                     lastSyncRawTime = t2;
+                    timeChangeRequested = false;
                     if (!forced) {
                         if (loop) t2 = Mathf.Repeat(t2, duration);
                         forced = Mathf.Abs(t2 - t) >= timeDriftDetectThreshold;

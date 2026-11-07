@@ -84,6 +84,7 @@ namespace JLChnToZ.VRC.VVMW {
                 if (valueUnchanged && activeHandler == (value == 0 ? null : playerHandlers[value - 1]))
                     return;
                 localActivePlayer = value;
+                ResetSyncTimeSamples();
                 retryUsedPlayers.Clear();
                 bool wasPlaying = Utilities.IsValid(activeHandler) && activeHandler.IsPlaying;
                 activeHandler = null;
@@ -437,6 +438,7 @@ namespace JLChnToZ.VRC.VVMW {
 
         void SwitchActiveHandler(AbstractMediaPlayerHandler newHandler) {
             if (activeHandler == newHandler) return;
+            ResetSyncTimeSamples();
             activeHandler.IsActive = false;
             activeHandler = newHandler;
             activeHandler.IsActive = true;
@@ -618,6 +620,7 @@ namespace JLChnToZ.VRC.VVMW {
         /// Internal use, do not invoke this.
         /// </summary>
         public override void OnVideoReady() {
+            ResetSyncTimeSamples();
             if (localTransportActiveForUfc) FinishMappedInitialReadyForUfc();
             if (localTransportActiveForUfc) {
                 if (!HasLocalTransportIdentityForUfc()) return;
