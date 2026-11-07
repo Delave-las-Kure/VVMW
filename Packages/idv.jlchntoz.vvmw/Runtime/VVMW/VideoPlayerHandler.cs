@@ -53,6 +53,14 @@ namespace JLChnToZ.VRC.VVMW {
         int localLoadGenerationForUfc, issuedLoadGenerationForUfc;
 
         public VRCUrl LoadedPhysicalUrlForUfc => loadedPhysicalUrlForUfc;
+        public bool CanContinueLocalTransportLoadForUfc(int generation, VRCUrl canonicalUrl, VRCUrl physicalUrl) =>
+            isActive && !IsReady && localLoadPendingForUfc && !localLoadBlockedForUfc &&
+            localLoadGenerationForUfc == generation && localLoadIssuedForUfc &&
+            issuedLoadGenerationForUfc == generation && nativeLoadPresentForUfc && !isLoadUrlRequested &&
+            !VRCUrl.IsNullOrEmpty(canonicalUrl) && !VRCUrl.IsNullOrEmpty(physicalUrl) &&
+            !VRCUrl.IsNullOrEmpty(currentUrl) && currentUrl.Equals(canonicalUrl) &&
+            !VRCUrl.IsNullOrEmpty(loadedUrl) && loadedUrl.Equals(canonicalUrl) &&
+            !VRCUrl.IsNullOrEmpty(loadedPhysicalUrlForUfc) && loadedPhysicalUrlForUfc.Equals(physicalUrl);
         public bool HasLocalTransportUrlForUfc(VRCUrl canonicalUrl) => !VRCUrl.IsNullOrEmpty(canonicalUrl) &&
             !VRCUrl.IsNullOrEmpty(localPhysicalUrlForUfc) && canonicalUrl.Equals(localCanonicalUrlForUfc);
 

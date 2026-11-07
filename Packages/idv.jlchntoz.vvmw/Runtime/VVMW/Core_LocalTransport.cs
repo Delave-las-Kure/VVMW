@@ -222,6 +222,16 @@ namespace JLChnToZ.VRC.VVMW {
             VRCUrl wanted = VRCUrl.IsNullOrEmpty(physicalUrl) ? canonicalUrl : physicalUrl;
             if (video.IsSupported(wanted.Get()) < 0) return 0;
             SetPreferredLocalTransportUrlForUfc(canonicalUrl, physicalUrl);
+            // Keep an already issued, unprepared load of this exact source. Off must
+            // not stop and reopen the primary URL while its first Ready is pending.
+            // Prepared/aligned and queued replacements retain their existing paths.
+            if (!isError && isLoading && localTransportActiveForUfc && localTransportRouteManagedForUfc &&
+                HasLocalTransportIdentityForUfc() && !localTransportReadyForUfc &&
+                localTransportAlignedRevisionForUfc == -1 && !localTransportSeekPendingForUfc &&
+                video.CanContinueLocalTransportLoadForUfc(localTransportGenerationForUfc, canonicalUrl, wanted)) {
+                localTransportRequestAcceptedForUfc = true;
+                return localTransportGenerationForUfc;
+            }
             if (!localTransportActiveForUfc && !isLoading && !isError && video.IsReady &&
                 !VRCUrl.IsNullOrEmpty(video.LoadedPhysicalUrlForUfc) && video.LoadedPhysicalUrlForUfc.Equals(wanted)) {
                 localTransportRequestAcceptedForUfc = true;
