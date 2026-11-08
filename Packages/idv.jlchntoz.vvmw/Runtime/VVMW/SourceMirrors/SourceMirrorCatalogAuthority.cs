@@ -19,6 +19,24 @@ namespace JLChnToZ.VRC.VVMW {
         public SourceMirrorCatalog catalog;
         public SourceMirrorCatalogAccessPolicy policy;
         public bool enablePublication;
+        // Opt-in protocol diagnostics only; never changes routing, timers or media.
+        public bool traceProtocol;
+        int protocolSequence;
+
+        void TraceProtocol(string kind, string playback, string version, string request, int peer, int code, int recipient = -1) {
+            if (!traceProtocol) return;
+            var me = Networking.LocalPlayer;
+            Debug.Log("[VVMW CATALOG PROTOCOL] seq=" + (++protocolSequence) +
+                " t=" + Time.realtimeSinceStartup.ToString("F3") +
+                " event=" + kind + " actor=" + (Utilities.IsValid(me) ? me.playerId : -1) +
+                " writer=" + OwnerId() + " peer=" + peer + " recipient=" + recipient + " code=" + code +
+                " packetPlayback=" + playback + " packetVersion=" + version + " request=" + request +
+                " core=" + (Utilities.IsValid(core) ? core.SharedPlaybackIdForUfc : "") +
+                " accepted=" + (Utilities.IsValid(catalog) ? catalog.Version : "") +
+                " current=" + (Utilities.IsValid(catalog) && catalog.IsCurrent) +
+                " pending=" + publicationPending + " pendingId=" + pendingId +
+                " pendingVersion=" + pendingVersion + " status=" + status + " catalogStatus=" + catalogStatus);
+        }
 
         [UdonSynced] int wireSchema = 1, wireWriter = -1, wireEditor = -1, wireRole;
         [UdonSynced] long wireRevision;
@@ -181,6 +199,7 @@ namespace JLChnToZ.VRC.VVMW {
         }
         public void _OnSharedPlaybackContextForUfc() {
             if (!GraphReady()) return;
+            TraceProtocol("core-before", core.SharedPlaybackIdForUfc, catalog.Version, "", -1, 0);
             applying = true;
             if (core.HasSharedPlaybackContextForUfc)
                 catalog.BindSharedContext(this, core.SharedPlaybackIdForUfc, core.CanonicalPcUrlForUfc,
@@ -190,6 +209,7 @@ namespace JLChnToZ.VRC.VVMW {
             TryApplyIncoming();
             ReconcileConsumedChallenge();
             if (writerBase && OwnerAligned() && !frozen) PublishRebind(false);
+            TraceProtocol("core-after", core.SharedPlaybackIdForUfc, catalog.Version, "", -1, 0);
         }
 
         public bool RequestPublishCurrentCatalog(int expectedRoleRevision, string expectedCatalogVersion,
@@ -207,6 +227,7 @@ namespace JLChnToZ.VRC.VVMW {
             publicationPending = true; pendingId = requestId; lastLocalId = requestId;
             pendingVersion = ""; pendingWriter = OwnerId(); pendingActor = me.playerId;
             pendingDeadline = Time.realtimeSinceStartup + 15f; status = SerializationPending;
+            TraceProtocol("request", expectedPlaybackId, expectedCatalogVersion, requestId, pendingWriter, status);
             SendCustomEventDelayedSeconds(nameof(_CatalogPublicationTimeout), 15f);
             var copiedUrls = CopyUrls(urls); var copiedIds = CopyStrings(sourceIds);
             var copiedLabels = CopyStrings(labels); var copiedMetadata = CopyStrings(recordMetadata);
@@ -364,8 +385,10 @@ namespace JLChnToZ.VRC.VVMW {
                 Time.realtimeSinceStartup <= handoffDeadline;
         }
         public override void OnDeserialization() {
+            TraceProtocol("snapshot-before", wirePlayback, wireFence + ":" + wireRevision, wireRequest, wireWriter, 0);
             reconcileAttempts = 0; ReconcileChallenge();
             if (StageWire()) TryApplyIncoming(); QueueReconcile();
+            TraceProtocol("snapshot-after", wirePlayback, wireFence + ":" + wireRevision, wireRequest, wireWriter, catalogStatus);
         }
         void PublishRebind(bool handoff) {
             if (!hasReceipt || !core.HasSharedPlaybackContextForUfc || !OwnerAligned() || frozen ||
@@ -390,15 +413,21 @@ namespace JLChnToZ.VRC.VVMW {
 
         void Reply(VRCPlayerApi actor, string requestId, int code, string committedVersion) {
             if (!Token(requestId, 128)) return;
+            TraceProtocol("reply-send", "", committedVersion, requestId, actor.playerId, code);
             if (actor.isLocal) AcceptReply(actor.playerId, requestId, code, committedVersion);
             else SendCustomNetworkEvent(NetworkEventTarget.All, nameof(CatalogPublishResult), actor.playerId, requestId, code, committedVersion);
         }
         [NetworkCallable(maxEventsPerSecond: 4)]
         public void CatalogPublishResult(int recipientPlayerId, string requestId, int code, string committedVersion) {
             var sender = NetworkCalling.CallingPlayer;
+            int senderId = Utilities.IsValid(sender) ? sender.playerId : -1;
+            TraceProtocol("reply-before", "", committedVersion, requestId, senderId, code, recipientPlayerId);
             if (!NetworkCalling.InNetworkCall || !Utilities.IsValid(sender) || sender.playerId != OwnerId() ||
-                sender.playerId != pendingWriter || !RouteReady()) return;
+                sender.playerId != pendingWriter || !RouteReady()) {
+                TraceProtocol("reply-rejected-sender", "", committedVersion, requestId, senderId, code, recipientPlayerId); return;
+            }
             AcceptReply(recipientPlayerId, requestId, code, committedVersion);
+            TraceProtocol("reply-after", "", committedVersion, requestId, senderId, code, recipientPlayerId);
         }
         void AcceptReply(int recipientPlayerId, string requestId, int code, string committedVersion) {
             var me = Networking.LocalPlayer;
@@ -425,10 +454,13 @@ namespace JLChnToZ.VRC.VVMW {
         public override void OnPreSerialization() {
             serializationAttemptVersion = wireFence + ":" + wireRevision;
             serializationAttemptRequest = wireRequest;
+            TraceProtocol("send-before", wirePlayback, serializationAttemptVersion, wireRequest, wireWriter, 0);
         }
         public override void OnPostSerialization(SerializationResult result) {
             lastSerializationByteCount = result.byteCount;
             lastSerializationSucceeded = result.success;
+            TraceProtocol("send-after", wirePlayback, serializationAttemptVersion, serializationAttemptRequest,
+                wireWriter, result.success ? result.byteCount : -1);
             if (!localSerializationPending || serializationAttemptVersion != localSerializedVersion ||
                 serializationAttemptRequest != wireRequest) return;
             localSerializationPending = false;
