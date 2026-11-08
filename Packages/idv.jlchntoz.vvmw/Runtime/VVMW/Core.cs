@@ -667,6 +667,9 @@ namespace JLChnToZ.VRC.VVMW {
                 default: return;
             }
             if (videoTime > 0) Time = videoTime;
+            // A paused late join has no Play callback to apply its first clock sample.
+            else if (intState == PAUSED && !Networking.IsOwner(gameObject))
+                SyncTime(true);
         }
 
         /// <summary>
