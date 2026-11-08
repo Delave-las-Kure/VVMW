@@ -68,6 +68,21 @@ namespace JLChnToZ.VRC.VVMW {
 
         byte CatalogBackend() => Utilities.IsValid(sourceCatalog.authority) ? core.ConfiguredPlayerTypeForUfc : core.ActivePlayer;
 
+        // The view reads this without registering an observer or changing Result.
+        public bool CanChooseSourceForUI => !NetworkCalling.InNetworkCall && enabled && gameObject.activeInHierarchy &&
+            !mirrorsOff && !disabling && MatchesCatalogSourceContext() && Configured();
+
+        bool MatchesCatalogSourceContext() {
+#if UNITY_ANDROID || UNITY_IOS
+            return false;
+#else
+            return Utilities.IsValid(core) && Utilities.IsValid(sourceCatalog) && sourceCatalog.IsCurrent &&
+                core.SharedStateForUfc != 0 && SameFilm() && sourceCatalog.ContextBackend == CatalogBackend() &&
+                (!Utilities.IsValid(sourceCatalog.authority) || sourceCatalog.authority.core == core) &&
+                !VRCUrl.IsNullOrEmpty(sourceCatalog.ContextCanonical) && sourceCatalog.ContextCanonical.Equals(core.Url);
+#endif
+        }
+
         void RegisterCatalogObserver() {
             if (NetworkCalling.InNetworkCall || !Utilities.IsValid(sourceCatalog) ||
                 !Utilities.IsValid(sourceCatalog.authority) || sourceCatalog.authority.core != core) return;
@@ -93,11 +108,7 @@ namespace JLChnToZ.VRC.VVMW {
 #if UNITY_ANDROID || UNITY_IOS
             selectionResult = SourceMirrorCatalog.UnsupportedPlatform; return false;
 #else
-            if (!Utilities.IsValid(core) || !Utilities.IsValid(sourceCatalog) || !sourceCatalog.IsCurrent ||
-                core.SharedStateForUfc == 0 || !SameFilm() || sourceCatalog.ContextBackend != CatalogBackend() ||
-                (Utilities.IsValid(sourceCatalog.authority) && sourceCatalog.authority.core != core) ||
-                VRCUrl.IsNullOrEmpty(sourceCatalog.ContextCanonical) ||
-                !sourceCatalog.ContextCanonical.Equals(core.Url)) {
+            if (!MatchesCatalogSourceContext()) {
                 selectionResult = SourceMirrorCatalog.NotContextReady; return false;
             }
             return true;

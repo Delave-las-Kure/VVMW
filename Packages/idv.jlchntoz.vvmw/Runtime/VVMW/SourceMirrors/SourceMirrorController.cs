@@ -22,6 +22,10 @@ namespace JLChnToZ.VRC.VVMW {
         float startedAt, previousRaw;
         int stableSamples, phase;
 
+        // Read-only presentation facts for optional source controls.
+        public bool HasPresentationWiring => Configured();
+        public bool IsTurningOff => disabling;
+
         public bool CanDetach => mirrorsOff && !held && !pending &&
             Utilities.IsValid(core) && !core.IsLocalTransportActiveForUfc && !core.IsLocalTransportPresentationPendingForUfc;
 
