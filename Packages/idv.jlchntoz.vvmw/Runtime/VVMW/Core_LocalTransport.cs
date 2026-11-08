@@ -281,6 +281,9 @@ namespace JLChnToZ.VRC.VVMW {
                 localTransportReadyForUfc = false;
                 localTransportAlignedRevisionForUfc = -1;
             }
+            // A failed initial source relinquishes first-ready authority. A new explicit
+            // load may reclaim it only while the room still awaits its first ready.
+            localTransportInitialOpeningForUfc = state == LOADING;
             localTransportRouteManagedForUfc = true;
             localTransportPresentationPendingForUfc = HasLocalTransportPresenterForUfc(localUrl);
             isLocalReloading = true;
