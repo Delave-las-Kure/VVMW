@@ -5,7 +5,7 @@ using VRC.Udon.Common.Enums;
 
 namespace JLChnToZ.VRC.VVMW {
     // Optional, finite transition coordinator. Core owns every playback/seek command.
-    // No Update loop, alternate clock, retry, predictive lead or secondary decoder.
+    // No extra timer loop, alternate clock, predictive lead or secondary decoder.
     [UdonBehaviourSyncMode(BehaviourSyncMode.NoVariableSync)]
     public partial class SourceMirrorController : UdonSharpBehaviour {
         public Core core;
@@ -62,6 +62,7 @@ namespace JLChnToZ.VRC.VVMW {
             Hold();generation=core.LocalTransportGenerationForUfc;
             acceptedRevision=-1;stableSamples=phase=0;previousRaw=-1;alignments=0;
             pending=true;failed=false;startedAt=Time.realtimeSinceStartup;
+            AutoObserveBegin();
             diagnostic="Synchronizing current room source";Queue();
         }
         public void _OnLocalTransportAuthorityChangedForUfc() {
@@ -96,8 +97,9 @@ namespace JLChnToZ.VRC.VVMW {
             SendCustomEventDelayedFrames(nameof(_Tick),1,EventTiming.LateUpdate);
         }
 
-        public void _SelectMirror() { disabling=false; Request(requestedPhysical); }
+        public void _SelectMirror() { disabling=false; Request(requestedPhysical); if(requestAccepted)StopAuto(); }
         public void _TurnOff() {
+            StopAuto();
             requestAccepted=false;
             if (!Configured()) { diagnostic="Presentation wiring incomplete"; return; }
             if (!SameFilm() || core.SharedStateForUfc==0) {
@@ -139,9 +141,11 @@ namespace JLChnToZ.VRC.VVMW {
         void Fail(string reason) {
             failed=true;pending=false;diagnostic=reason;Hold();
             core.FailLocalTransportForUfc(generation);
+            AutoAfterFailure();
         }
         void Finish() {
             pending=false;failed=false;diagnostic="Ready";
+            AutoAfterReady();
             if (disabling) {
                 disabling=false;mirrorsOff=true;core.RegisterLocalTransportPresenterForUfc(null);enabled=false;
             }
@@ -154,6 +158,7 @@ namespace JLChnToZ.VRC.VVMW {
         public void _Tick() {
             tickQueued=false;
             if (!pending || !enabled || !gameObject.activeInHierarchy) return;
+            if (AutoAdvanceTick()) return;
             tickCount++;
             if (!SameFilm() || (!core.IsLocalTransportActiveForUfc && !core.IsLocalTransportPresentationPendingForUfc && !core.IsLoading && !core.IsReady)) {
                 if (disabling) { Release();Finish();diagnostic="Mirrors off";return; }
@@ -189,6 +194,7 @@ namespace JLChnToZ.VRC.VVMW {
             Queue();
         }
         void OnDisable() {
+            StopAuto();
             // Direct removal during an in-flight operation is deliberately fail-closed.
             // Use _TurnOff and wait for CanDetach before disabling/removing the composition.
             if (pending || failed) diagnostic="Finish canonical handback before removing the module";

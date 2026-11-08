@@ -10,6 +10,7 @@ namespace JLChnToZ.VRC.VVMW {
         VRCUrl selectedCanonical, selectedMobile;
         byte selectedBackend;
         int selectionResult = SourceMirrorCatalog.NotContextReady;
+        int catalogSelectionSerial;
 
         public string SelectedSourceId => selectedSourceId;
         public string SelectedCatalogVersion => selectedVersion;
@@ -47,6 +48,7 @@ namespace JLChnToZ.VRC.VVMW {
         public void CatalogContextChanged(SourceMirrorCatalog changedCatalog) {
             if (changedCatalog != sourceCatalog || (NetworkCalling.InNetworkCall &&
                 (!Utilities.IsValid(sourceCatalog.authority) || !sourceCatalog.authority.IsApplyingCatalog))) return;
+            AutoContextChanged();
             if (Utilities.IsValid(sourceCatalog.authority) && sourceCatalog.authority.core == core &&
                 sourceCatalog.authority.MatchesCoreContext(sourceCatalog.ContextPlaybackId,
                     sourceCatalog.ContextCanonical, sourceCatalog.ContextMobileCanonical, sourceCatalog.ContextBackend)) {
@@ -102,7 +104,10 @@ namespace JLChnToZ.VRC.VVMW {
 #endif
         }
 
-        public bool SelectSource(string sourceId, string expectedCatalogVersion, string expectedPlaybackId) {
+        public bool SelectSource(string sourceId, string expectedCatalogVersion, string expectedPlaybackId) =>
+            SelectCatalogSource(sourceId, expectedCatalogVersion, expectedPlaybackId, false);
+
+        bool SelectCatalogSource(string sourceId, string expectedCatalogVersion, string expectedPlaybackId, bool fromAuto) {
             if (!CanSelectCatalogSource()) return false;
             var catalog = sourceCatalog;
             var requestedCore = core;
@@ -115,9 +120,12 @@ namespace JLChnToZ.VRC.VVMW {
             VRCUrl requestedCanonical = catalog.ContextCanonical;
             VRCUrl requestedMobile = catalog.ContextMobileCanonical;
             byte requestedBackend = catalog.ContextBackend;
+            int serial = ++catalogSelectionSerial;
             // Existing Request owns every physical command and output transition.
             // Keep the old intent/receipt if the replacement is rejected.
             Request(physical);
+            // A newer explicit choice inside a Core callback owns the intent.
+            if (serial != catalogSelectionSerial) return false;
             if (!requestAccepted) { selectionResult = SourceMirrorCatalog.TransportRejected; return false; }
             if (sourceCatalog != catalog || core != requestedCore ||
                 catalog.ContextPlaybackId != expectedPlaybackId || catalog.FilmId != requestedFilm ||
@@ -135,6 +143,7 @@ namespace JLChnToZ.VRC.VVMW {
             selectedMobile = requestedMobile;
             selectedBackend = requestedBackend;
             requestedPhysical = physical;
+            if (!fromAuto) StopAuto();
             selectionResult = SourceMirrorCatalog.Accepted;
             return true;
         }
