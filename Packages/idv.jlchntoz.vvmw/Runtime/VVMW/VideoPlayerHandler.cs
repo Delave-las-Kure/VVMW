@@ -299,7 +299,7 @@ namespace JLChnToZ.VRC.VVMW {
 #endif
         void _GetTexture() {
             isTexturePollScheduled = false;
-            if (!isActive || (isWaitingForTexture && !videoPlayer.IsPlaying)) {
+            if (!isActive || (isWaitingForTexture && !videoPlayer.IsPlaying && !(isPaused && isReady))) {
                 isWaitingForTexture = false;
                 ClearTexture();
                 return;
@@ -337,7 +337,7 @@ namespace JLChnToZ.VRC.VVMW {
 
         void BlitBufferScreen() {
             if (!(core.enableMipmap || (isAvPro && useFlickerWorkaround && Utilities.IsValid(blitMaterial))) ||
-                isReblitRunning || !Utilities.IsValid(texture) || !videoPlayer.IsPlaying)
+                isReblitRunning || !Utilities.IsValid(texture) || (!videoPlayer.IsPlaying && !(isPaused && isReady)))
                 return;
             isReblitRunning = true;
             SendCustomEventDelayedFrames(nameof(_BlitBufferScreen), 0, EventTiming.LateUpdate);
@@ -352,7 +352,7 @@ namespace JLChnToZ.VRC.VVMW {
         public
 #endif
         void _BlitBufferScreen() {
-            if (!isActive || !videoPlayer.IsPlaying || !Utilities.IsValid(texture)) {
+            if (!isActive || (!videoPlayer.IsPlaying && !(isPaused && isReady)) || !Utilities.IsValid(texture)) {
                 isReblitRunning = false;
                 return;
             }
@@ -525,12 +525,18 @@ namespace JLChnToZ.VRC.VVMW {
                 }
             }
             core.OnVideoReady();
+            // A first load into a paused room has no Start callback to discover its texture.
+            if (isPaused) WaitForTexture();
         }
 
         public override void OnVideoStart() {
             if (IgnoreLocalTransportCallbackForUfc()) return;
             isPaused = false;
             if (isActive) core.OnVideoStart();
+            WaitForTexture();
+        }
+
+        void WaitForTexture() {
             if (!isWaitingForTexture) {
                 isWaitingForTexture = true;
                 // Reuse a pending poll rather than starting a second delayed-event chain.
