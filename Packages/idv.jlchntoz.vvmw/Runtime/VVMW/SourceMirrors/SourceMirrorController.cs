@@ -31,7 +31,7 @@ namespace JLChnToZ.VRC.VVMW {
         int stableSamples, phase;
 
         // Read-only presentation facts for optional source controls.
-        public bool HasPresentationWiring => Configured();
+        public bool HasPresentationWiring => PresentationConfigured();
         public bool IsHoldingPresentation => held;
         public bool IsTurningOff => disabling;
         VRCUrl lastAcceptedPhysical;
@@ -40,8 +40,10 @@ namespace JLChnToZ.VRC.VVMW {
         public bool CanDetach => mirrorsOff && !held && !pending &&
             Utilities.IsValid(core) && !core.IsLocalTransportActiveForUfc && !core.IsLocalTransportPresentationPendingForUfc;
 
-        bool Configured() {
-            if (!Utilities.IsValid(core) || VRCUrl.IsNullOrEmpty(canonical)) return false;
+        bool Configured() => !VRCUrl.IsNullOrEmpty(canonical) && PresentationConfigured();
+
+        bool PresentationConfigured() {
+            if (!Utilities.IsValid(core)) return false;
             if (Utilities.IsValid(presentation)) {
                 if ((videoOnlyRenderers != null && videoOnlyRenderers.Length > 0) || !presentation.IsWiredFor(core,this)) return false;
             } else {
@@ -141,9 +143,9 @@ namespace JLChnToZ.VRC.VVMW {
         public void _TurnOff() {
             StopAuto();
             requestAccepted=false;
-            if (!Configured()) { diagnostic="Presentation wiring incomplete"; return; }
+            if (!PresentationConfigured()) { diagnostic="Presentation wiring incomplete"; return; }
             if (!SameFilm() || core.SharedStateForUfc==0) {
-                core.SetPreferredLocalTransportUrlForUfc(canonical,null);
+                if (!VRCUrl.IsNullOrEmpty(canonical)) core.SetPreferredLocalTransportUrlForUfc(canonical,null);
                 core.RegisterLocalTransportPresenterForUfc(null);
                 disabling=false;pending=failed=false;mirrorsOff=true;Release();enabled=false;requestAccepted=true;
                 return;

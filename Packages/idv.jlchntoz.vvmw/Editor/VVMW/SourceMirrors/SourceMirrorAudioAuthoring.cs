@@ -62,9 +62,10 @@ namespace JLChnToZ.VRC.VVMW.Editors {
         }
 
         internal static SourceMirrorController Install(Core core, VRCUrl canonical, Renderer[] screens,
-            AbstractAudioController[] routes, Type[] compatibleTypes, SourceMirrorPresentation presentation) {
+            AbstractAudioController[] routes, Type[] compatibleTypes, SourceMirrorPresentation presentation,
+            SourceMirrorCatalog roomCatalog = null) {
             Editable(core); ValidatePrograms();
-            Need(!VRCUrl.IsNullOrEmpty(canonical), "Choose the canonical film URL.");
+            Need(!VRCUrl.IsNullOrEmpty(canonical) || roomCatalog, "Choose the canonical film URL or room catalog.");
             Need(!SceneObjects<SourceMirrorController>().Any(x => x.core == core), "This Core already has source mirrors.");
             SourceMirrorPresentationAuthoring.Choice(core,screens,presentation,true);
             Need(screens == null || !SceneObjects<SourceMirrorController>().Any(x => x.videoOnlyRenderers != null && x.videoOnlyRenderers.Intersect(screens).Any()),
@@ -104,6 +105,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                 Undo.RegisterCreatedObjectUndo(UdonSharpEditorUtility.GetBackingUdonBehaviour(controller), "Create source mirrors backing");
                 controller.enabled = false; controller.mirrorsOff = true;
                 controller.core = core; controller.canonical = canonical; controller.videoOnlyRenderers = screens;
+                controller.sourceCatalog = roomCatalog; controller.observeCoreLoads = roomCatalog;
                 controller.audioGates = new SourceMirrorOutputGate[0];
                 controller.existingAudioControllers = routes.ToArray();
                 controller.existingAudioControllerTypes = routes.Select(x => x.GetType().FullName).ToArray();

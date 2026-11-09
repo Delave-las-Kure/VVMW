@@ -53,7 +53,10 @@ namespace JLChnToZ.VRC.VVMW.Editors {
 
         public static void Validate(SourceMirrorController controller) {
             Need(controller && controller.core, "Source mirrors require a Core.");
-            Need(!VRCUrl.IsNullOrEmpty(controller.canonical), "Source mirrors require a canonical film URL.");
+            Need(!VRCUrl.IsNullOrEmpty(controller.canonical) || (controller.observeCoreLoads &&
+                controller.sourceCatalog && controller.sourceCatalog.authority &&
+                controller.sourceCatalog.authority.core == controller.core),
+                "Choose a canonical film URL or an explicit room catalog observer.");
             var core = controller.core;
             Need(controller.gameObject.scene == core.gameObject.scene, "Controller and Core must belong to the same scene.");
             Need(SceneObjects<SourceMirrorController>().Count(x => x.core == core) == 1, "Only one source-mirror controller may own a Core.");
@@ -167,6 +170,21 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             Renderer[] screens, AbstractAudioController[] outputs, Type[] compatibleControllerTypes,
             SourceMirrorPresentation presentation = null) =>
             SourceMirrorAudioAuthoring.Install(core, canonical, screens, outputs, compatibleControllerTypes, presentation);
+
+        /// <summary>Compose an idle room without inventing or loading a first film.</summary>
+        public static SourceMirrorController InstallForRoomCore(Core core, SourceMirrorCatalog catalog,
+            Renderer[] screens, AbstractAudioController[] outputs, Type[] compatibleControllerTypes,
+            SourceMirrorPresentation presentation = null) {
+            Need(core && catalog && catalog.authority && catalog.authority.core == core,
+                "Choose the complete catalog/authority graph for this room Core.");
+            ValidateCatalogAuthority(catalog.authority);
+            // An unset Udon field can deserialize as VRCUrl(null), which SDK IsNullOrEmpty
+            // does not equate to VRCUrl.Empty. Normalize only the idle authoring value.
+            var canonical = core.Url;
+            if (canonical == null || string.IsNullOrEmpty(canonical.Get())) canonical = VRCUrl.Empty;
+            return SourceMirrorAudioAuthoring.Install(core, canonical, screens, outputs,
+                compatibleControllerTypes, presentation, catalog);
+        }
 
         public static void Remove(SourceMirrorController controller) {
             Need(controller, "Select the source-mirror controller.");
