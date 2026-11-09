@@ -10,13 +10,13 @@ using static JLChnToZ.VRC.VVMW.Editors.SourceMirrorAuthoring;
 namespace JLChnToZ.VRC.VVMW.Editors {
     // Retains the world's audio controller and gain input. Never adds a second AudioSource/writer.
     internal static class SourceMirrorAudioAuthoring {
-        static void Record(UdonSharp.UdonSharpBehaviour behavior, string label) {
+        internal static void Record(UdonSharp.UdonSharpBehaviour behavior, string label) {
             Copy(behavior);
             var backing = UdonSharpEditorUtility.GetBackingUdonBehaviour(behavior);
             Undo.RegisterCompleteObjectUndo(behavior, label);
             if (backing) Undo.RegisterCompleteObjectUndo(backing, label);
         }
-        static void Copy(UdonSharp.UdonSharpBehaviour behavior) {
+        internal static void Copy(UdonSharp.UdonSharpBehaviour behavior) {
             UdonSharpEditorUtility.CopyProxyToUdon(behavior);
             // Unity Undo snapshots serialized fields, not Udon's live variable table.
             var backing = UdonSharpEditorUtility.GetBackingUdonBehaviour(behavior);
@@ -62,13 +62,12 @@ namespace JLChnToZ.VRC.VVMW.Editors {
         }
 
         internal static SourceMirrorController Install(Core core, VRCUrl canonical, Renderer[] screens,
-            AbstractAudioController[] routes, Type[] compatibleTypes) {
+            AbstractAudioController[] routes, Type[] compatibleTypes, SourceMirrorPresentation presentation) {
             Editable(core); ValidatePrograms();
             Need(!VRCUrl.IsNullOrEmpty(canonical), "Choose the canonical film URL.");
             Need(!SceneObjects<SourceMirrorController>().Any(x => x.core == core), "This Core already has source mirrors.");
-            Need(screens != null && screens.Length > 0 && screens.All(x => x && x.gameObject.scene == core.gameObject.scene) &&
-                screens.Distinct().Count() == screens.Length, "Choose distinct video-only renderers in the Core scene.");
-            Need(!SceneObjects<SourceMirrorController>().Any(x => x.videoOnlyRenderers != null && x.videoOnlyRenderers.Intersect(screens).Any()),
+            SourceMirrorPresentationAuthoring.Choice(core,screens,presentation,true);
+            Need(screens == null || !SceneObjects<SourceMirrorController>().Any(x => x.videoOnlyRenderers != null && x.videoOnlyRenderers.Intersect(screens).Any()),
                 "Another controller owns a selected screen.");
             Need(routes != null && routes.Length > 0 && routes.All(x => x && x.enabled && x.gameObject.activeInHierarchy &&
                 x.gameObject.scene == core.gameObject.scene) && routes.Distinct().Count() == routes.Length, "Choose distinct active audio controllers.");
@@ -112,6 +111,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                 controller.audioControllersBeforeInstall = prior;
                 controller.preserveRoutesBeforeInstall = routes.Select(x => Property(x, "preserveOutputRouteForUfc").boolValue).ToArray();
                 controller.existingAudioRoutesCaptured = true;
+                SourceMirrorPresentationAuthoring.Bind(controller,presentation);
                 foreach (var route in routes) {
                     var serialized = new SerializedObject(route);
                     serialized.FindProperty("preserveOutputRouteForUfc").boolValue = true;
@@ -141,6 +141,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             Undo.SetCurrentGroupName("Remove source mirrors and retain existing audio controllers");
             try {
                 Record(core, "Restore authored audio routes");
+                SourceMirrorPresentationAuthoring.Unbind(controller);
                 Array(core, "audioSources", controller.audioSourcesBeforeInstall);
                 Array(core, "audioControllers", controller.audioControllersBeforeInstall);
                 for (int i = 0; i < controller.existingAudioControllers.Length; i++) {

@@ -58,8 +58,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             Need(controller.gameObject.scene == core.gameObject.scene, "Controller and Core must belong to the same scene.");
             Need(SceneObjects<SourceMirrorController>().Count(x => x.core == core) == 1, "Only one source-mirror controller may own a Core.");
             var screens = controller.videoOnlyRenderers;
-            Need(screens != null && screens.Length > 0 && screens.All(x => x && x.gameObject.scene == core.gameObject.scene) &&
-                screens.Distinct().Count() == screens.Length, "Choose distinct video-only renderers in the Core scene.");
+            SourceMirrorPresentationAuthoring.Validate(controller);
             var gates = controller.audioGates;
             if (controller.existingAudioControllers != null && controller.existingAudioControllers.Length > 0)
                 SourceMirrorAudioAuthoring.Validate(controller);
@@ -86,7 +85,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             }
             }
             foreach (var other in SceneObjects<SourceMirrorController>().Where(x => x != controller)) {
-                Need(other.videoOnlyRenderers == null || !other.videoOnlyRenderers.Intersect(screens).Any(), "Two controllers share a video renderer.");
+                Need(screens == null || other.videoOnlyRenderers == null || !other.videoOnlyRenderers.Intersect(screens).Any(), "Two controllers share a video renderer.");
                 Need(gates == null || other.audioGates == null || !other.audioGates.Intersect(gates).Any(), "Two controllers share an output gate.");
             }
             ValidatePrograms();
@@ -165,8 +164,9 @@ namespace JLChnToZ.VRC.VVMW.Editors {
 
         /// <summary>Explicitly opt qualified subclasses into the existing-controller audio profile.</summary>
         public static SourceMirrorController InstallWithAudioControllers(Core core, VRCUrl canonical,
-            Renderer[] screens, AbstractAudioController[] outputs, Type[] compatibleControllerTypes) =>
-            SourceMirrorAudioAuthoring.Install(core, canonical, screens, outputs, compatibleControllerTypes);
+            Renderer[] screens, AbstractAudioController[] outputs, Type[] compatibleControllerTypes,
+            SourceMirrorPresentation presentation = null) =>
+            SourceMirrorAudioAuthoring.Install(core, canonical, screens, outputs, compatibleControllerTypes, presentation);
 
         public static void Remove(SourceMirrorController controller) {
             Need(controller, "Select the source-mirror controller.");
@@ -184,6 +184,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             Undo.IncrementCurrentGroup();
             int group = Undo.GetCurrentGroup();
             Undo.SetCurrentGroupName("Remove VizVid source mirrors");
+            SourceMirrorPresentationAuthoring.Unbind(controller);
             Array(core, "audioSources", Array<AudioSource>(core, "audioSources").Concat(gates.Select(Output)).ToArray());
             Array(core, "audioControllers", Array<AbstractAudioController>(core, "audioControllers").Except(gates).ToArray());
             foreach (var gate in gates) {

@@ -11,6 +11,7 @@ namespace JLChnToZ.VRC.VVMW {
         public Core core;
         public VRCUrl canonical, requestedPhysical;
         public Renderer[] videoOnlyRenderers;
+        public SourceMirrorPresentation presentation;
         public SourceMirrorOutputGate[] audioGates;
         // Explicit alternative to direct gates; retain the world's existing gain controllers.
         public AbstractAudioController[] existingAudioControllers;
@@ -31,6 +32,7 @@ namespace JLChnToZ.VRC.VVMW {
 
         // Read-only presentation facts for optional source controls.
         public bool HasPresentationWiring => Configured();
+        public bool IsHoldingPresentation => held;
         public bool IsTurningOff => disabling;
         VRCUrl lastAcceptedPhysical;
         public VRCUrl LastAcceptedPhysicalUrl => lastAcceptedPhysical;
@@ -39,11 +41,15 @@ namespace JLChnToZ.VRC.VVMW {
             Utilities.IsValid(core) && !core.IsLocalTransportActiveForUfc && !core.IsLocalTransportPresentationPendingForUfc;
 
         bool Configured() {
-            if (!Utilities.IsValid(core) || VRCUrl.IsNullOrEmpty(canonical) ||
-                videoOnlyRenderers == null || videoOnlyRenderers.Length == 0) return false;
-            for (int i=0;i<videoOnlyRenderers.Length;i++) {
-                if (!Utilities.IsValid(videoOnlyRenderers[i])) return false;
-                for (int j=0;j<i;j++) if (videoOnlyRenderers[i] == videoOnlyRenderers[j]) return false;
+            if (!Utilities.IsValid(core) || VRCUrl.IsNullOrEmpty(canonical)) return false;
+            if (Utilities.IsValid(presentation)) {
+                if ((videoOnlyRenderers != null && videoOnlyRenderers.Length > 0) || !presentation.IsWiredFor(core,this)) return false;
+            } else {
+                if (videoOnlyRenderers == null || videoOnlyRenderers.Length == 0) return false;
+                for (int i=0;i<videoOnlyRenderers.Length;i++) {
+                    if (!Utilities.IsValid(videoOnlyRenderers[i])) return false;
+                    for (int j=0;j<i;j++) if (videoOnlyRenderers[i] == videoOnlyRenderers[j]) return false;
+                }
             }
             if (existingAudioControllers != null && existingAudioControllers.Length > 0) {
                 if (audioGates != null && audioGates.Length > 0) return false;
@@ -97,18 +103,22 @@ namespace JLChnToZ.VRC.VVMW {
 
         void Hold() {
             if (!held) {
-                rendererWasEnabled = new bool[videoOnlyRenderers.Length];
-                for (int i=0;i<videoOnlyRenderers.Length;i++) rendererWasEnabled[i]=videoOnlyRenderers[i].enabled;
+                if (!Utilities.IsValid(presentation)) {
+                    rendererWasEnabled = new bool[videoOnlyRenderers.Length];
+                    for (int i=0;i<videoOnlyRenderers.Length;i++) rendererWasEnabled[i]=videoOnlyRenderers[i].enabled;
+                }
                 if (existingAudioControllers != null && existingAudioControllers.Length > 0) {
                     for (int i=0;i<existingAudioControllers.Length;i++) existingAudioControllers[i].HoldOutputForUfc(this);
                 } else for (int i=0;i<audioGates.Length;i++) audioGates[i].Hold();
                 held=true;
             }
             picturePresented=false;
-            for (int i=0;i<videoOnlyRenderers.Length;i++) videoOnlyRenderers[i].enabled=false;
+            if (Utilities.IsValid(presentation)) presentation.Hold();
+            else for (int i=0;i<videoOnlyRenderers.Length;i++) videoOnlyRenderers[i].enabled=false;
         }
         void Show() {
-            for (int i=0;i<videoOnlyRenderers.Length;i++) videoOnlyRenderers[i].enabled=rendererWasEnabled[i];
+            if (Utilities.IsValid(presentation)) presentation.Present();
+            else for (int i=0;i<videoOnlyRenderers.Length;i++) videoOnlyRenderers[i].enabled=rendererWasEnabled[i];
             picturePresented=true;
         }
         void Release() {
@@ -119,6 +129,7 @@ namespace JLChnToZ.VRC.VVMW {
                     if (Utilities.IsValid(existingAudioControllers[i])) existingAudioControllers[i].ReleaseOutputForUfc(this);
             } else for (int i=0;i<audioGates.Length;i++) audioGates[i].Release();
             held=false;
+            if (Utilities.IsValid(presentation)) presentation.End();
         }
         void Queue() {
             if (tickQueued || !pending || !enabled || !gameObject.activeInHierarchy) return;
@@ -170,6 +181,7 @@ namespace JLChnToZ.VRC.VVMW {
         void Fail(string reason) {
             failed=true;pending=false;diagnostic=reason;Hold();
             core.FailLocalTransportForUfc(generation);
+            if (Utilities.IsValid(presentation)) presentation.Error();
             AutoAfterFailure();
         }
         void Finish() {
