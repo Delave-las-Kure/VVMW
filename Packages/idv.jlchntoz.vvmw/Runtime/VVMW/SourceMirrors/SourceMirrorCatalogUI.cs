@@ -154,10 +154,12 @@ namespace JLChnToZ.VRC.VVMW {
             bool pending = graph && authority.PublicationPending;
             bool ownRequest = graph && !string.IsNullOrEmpty(request) && authority.PendingRequestId == request;
             int state = ownRequest ? authority.PublicationStatus : 0;
+            bool contextChanged = bound && graph && (authority.core.SharedPlaybackIdForUfc != playback || authority.policy.GetRoleRevision() != role);
             // Confirmation belongs to the submitted request. Do not silently
             // rebind the draft when its matching snapshot changes the version.
-            string status = !graph || !Fields() ? "Unavailable" : ownRequest && (pending || state == SourceMirrorCatalogAuthority.CommittedLocal) ? "Waiting" :
-                ownRequest && state == SourceMirrorCatalogAuthority.Confirmed ? "Confirmed" :
+            string status = !graph || !Fields() ? "Unavailable" : !bound || !authority.core.HasSharedPlaybackContextForUfc ? "NoVideo" :
+                contextChanged ? "Changed" : ownRequest && (pending || state == SourceMirrorCatalogAuthority.CommittedLocal) ? "Waiting" :
+                ownRequest && state == SourceMirrorCatalogAuthority.Confirmed && authority.PendingCommittedVersion == authority.catalog.Version ? "Confirmed" :
                 ownRequest && state == SourceMirrorCatalogAuthority.Unconfirmed ? "Unconfirmed" :
                 ownRequest && state != SourceMirrorCatalogAuthority.Confirmed ? "Rejected" :
                 !bound ? "NoVideo" : !Authorized() ? "ViewOnly" : IsDraftStale ? "Changed" :
