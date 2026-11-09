@@ -148,6 +148,7 @@ namespace JLChnToZ.VRC.VVMW {
             get => speed;
             set {
                 if (speed == value) return;
+                ReopenPresentationForRoomCommandForUfc();
                 float transportTarget = localTransportActiveForUfc ? SharedTargetTimeForUfc : 0;
                 speed = Mathf.Clamp(value, 0.1F, 2);
                 if (localTransportActiveForUfc) {

@@ -16,9 +16,11 @@ namespace JLChnToZ.VRC.VVMW {
         public float RoomPlaybackTimeForUfc => CanControlRoomPlaybackForUfc ? SharedTargetTimeForUfc : Time;
 
         // A checkpoint must never sample an unaccepted native alignment or local error.
-        public bool CanCapturePlaybackForUfc => !localTransportActiveForUfc &&
+        public bool CanCapturePlaybackForUfc => CanCapturePlaybackPositionForUfc(Time);
+        public bool CanCapturePlaybackPositionForUfc(float position) => !localTransportActiveForUfc &&
             !localTransportPresentationPendingForUfc && !isLoading && !isError &&
-            (VRCUrl.IsNullOrEmpty(localUrl) || (CanControlRoomPlaybackForUfc && IsReady && !float.IsNaN(Time) && !float.IsInfinity(Time) && Time >= 0));
+            (VRCUrl.IsNullOrEmpty(localUrl) || (CanControlRoomPlaybackForUfc && IsReady && !float.IsNaN(position) && !float.IsInfinity(position) && position >= 0 &&
+                (IsStatic || float.IsInfinity(Duration) || Mathf.Abs(position - SharedTargetTimeForUfc) <= LocalTransportPictureToleranceForUfc)));
 
         void ReopenPresentationForRoomCommandForUfc() {
             if (localTransportActiveForUfc || (state != PLAYING && state != PAUSED) || !HasLocalTransportPresentationForUfc()) return;

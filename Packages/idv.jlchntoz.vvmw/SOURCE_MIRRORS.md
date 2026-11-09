@@ -95,7 +95,12 @@ UFC-адаптация и точные преобразования сущест
 выравнивание выполняет существующая транзакция. Новый URL не загружается.
 
 `CanCapturePlaybackForUfc` закрыт в private pending, локальной ошибке, до принятия
-общего состояния и при некорректном времени. UFC session сохраняет предыдущий
+общего состояния, при некорректном времени и пока измеримая native позиция
+не попала в существующий Core допуск общей позиции. Это read-only проверка
+checkpoint, не новый регулятор или picture gate. Финальный кандидат проверяется
+через `CanCapturePlaybackPositionForUfc(sample)`, чтобы последующий native read
+не подменил проверенное значение. Static/live путь сохраняется.
+UFC session сохраняет предыдущий
 checkpoint до окончания picture gate. Физические mirror URLs туда не попадают.
 Это проверка пригодности локального снимка, а не PlayerObject/persistence права.
 
@@ -103,7 +108,9 @@ checkpoint до окончания picture gate. Физические mirror URL
 `useForkRoomPlayback` у обеих оболочек и session. Профиль применяется только с
 проверенным форком и synced Core; прежний command bridge не используется.
 Существующие UFC права и Frontend lock проверяются при каждом действии.
-Seek drag, ±10s, UI availability и callback читают одни факты. Без этого профиля
+Seek drag, ±10s, UI availability и callback читают одни факты. Нижний Core speed
+setter также сохраняет anchor в pending-ack; UI/права изменения скорости прежние.
+Без этого профиля
 сохраняется штатный путь; типы SourceMirrors не требуются общему Core API.
 Квалификация ClientSim использует явно seeded header/decoder/restored inputs;
 она не заменяет AVPro/Photon, фактическое восстановление persistence или client smoke.
