@@ -36,12 +36,26 @@ namespace JLChnToZ.VRC.VVMW {
         public string DraftPlaybackId => playback;
         public string DraftCatalogVersion => version;
         public int DraftRoleRevision => role;
+        public bool HasLocalEdits {
+            get {
+                if (!bound) return false;
+                if (!Fields() || compatibilityToggle.isOn) return true;
+                for (int i = 0; i < 3; i++) if (nameInputs[i].text != originalLabels[i]) return true;
+                for (int i = 0; i < 2; i++) {
+                    var value = mirrorInputs[i].GetUrl(); var original = originalUrls[i + 1];
+                    if (VRCUrl.IsNullOrEmpty(value) ? !VRCUrl.IsNullOrEmpty(original) :
+                        VRCUrl.IsNullOrEmpty(original) || !value.Equals(original)) return true;
+                }
+                return false;
+            }
+        }
 
         bool bound, tickQueued;
         int role, language;
         VRCUrl primary;
         string playback = "", version = "", film = "", tag = "", request = "", feedback = "";
         string[] ids = new string[3];
+        string[] originalLabels = new string[3];
         VRCUrl[] originalUrls = new VRCUrl[3];
         bool LocalAction() => !NetworkCalling.InNetworkCall && enabled && gameObject.activeInHierarchy;
         bool Graph() => Utilities.IsValid(authority) && authority.enabled && authority.gameObject.activeInHierarchy &&
@@ -94,6 +108,7 @@ namespace JLChnToZ.VRC.VVMW {
                 bool present = current && i < catalog.SourceCount;
                 if (present) { ids[i] = catalog.GetSourceId(i); originalUrls[i] = catalog.GetSourceUrl(i); }
                 nameInputs[i].text = present ? catalog.GetSourceLabel(i) : Tr(i == 0 ? "Primary" : i == 1 ? "Mirror1" : "Mirror2");
+                originalLabels[i] = nameInputs[i].text;
                 if (i > 0) mirrorInputs[i - 1].SetUrl(present ? catalog.GetSourceUrl(i) : VRCUrl.Empty);
             }
             // A removed source may already use one of the default slot IDs.
@@ -150,6 +165,13 @@ namespace JLChnToZ.VRC.VVMW {
         }
         public void _Refresh() {
             if (!LocalAction() || !IsOpen) return;
+            // A clean read-only view follows the accepted list. An editor's
+            // fixed draft, local changes and outstanding/error receipts do not.
+            if (Graph() && Fields() && !Authorized() && !authority.PublicationPending &&
+                (bound ? IsDraftStale : authority.core.HasSharedPlaybackContextForUfc) &&
+                string.IsNullOrEmpty(feedback) && !HasLocalEdits &&
+                (string.IsNullOrEmpty(request) || (authority.PendingRequestId == request &&
+                    authority.PublicationStatus == SourceMirrorCatalogAuthority.Confirmed))) ReadDraft();
             bool graph = Graph(), editable = CanEdit && Fields();
             bool pending = graph && authority.PublicationPending;
             bool ownRequest = graph && !string.IsNullOrEmpty(request) && authority.PendingRequestId == request;
