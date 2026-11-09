@@ -143,6 +143,8 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             Need(view && view.authority && view.panel && view.entryButton && view.applyButton && view.reloadButton && view.compatibilityToggle,
                 "Catalog UI references are incomplete.");
             SourceMirrorAuthoring.ValidateCatalogAuthority(view.authority);
+            Need(view.authority.policy.GetType().GetMethod(nameof(SourceMirrorCatalogAccessPolicy.CanEditCatalogLocally)).DeclaringType != typeof(SourceMirrorCatalogAccessPolicy),
+                "Catalog UI needs an explicit local edit-capability query in the world access policy.");
             var canvas = view.GetComponentInParent<Canvas>();
             Need(canvas && canvas.renderMode == RenderMode.WorldSpace && canvas.gameObject.layer != 5 &&
                 view.gameObject.scene == view.authority.core.gameObject.scene, "Catalog UI Canvas/Core scene mismatch or reserved UI5.");

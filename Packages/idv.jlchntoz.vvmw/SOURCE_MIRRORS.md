@@ -206,6 +206,13 @@ Draft фиксирует общий запуск, версию каталога 
 Закрытие формы не отменяет принятый запрос. Зрители читают ту же форму без права
 изменения, проверка права повторяется в callback и в authority.
 
+World policy отдельно реализует read-only `CanEditCatalogLocally` для фактического
+локального ведущего; он может редактировать форму и с другого сетевого клиента.
+Default этой возможности — false, authoring формы требует явный override.
+`CanPublishCatalog` сохраняет строгую проверку настоящего отправителя только
+у authoritative writer. Разрешённое локальное редактирование не заменяет эту
+проверку и не передаёт ownership каталога или Core.
+
 Создание только явное: `GameObject → VizVid → Source Mirrors → Shared Catalog
 Controls`, существующие Canvas/authority/UIHandler того же Core. Фабрика берёт
 темы кнопок, текста и URL-ввода VizVid, поддерживает RU/EN/JA. Нужен WorldSpace

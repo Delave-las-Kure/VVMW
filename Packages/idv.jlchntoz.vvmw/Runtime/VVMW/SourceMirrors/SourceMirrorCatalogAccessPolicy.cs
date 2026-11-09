@@ -11,6 +11,10 @@ namespace JLChnToZ.VRC.VVMW {
         public abstract VRCPlayerApi GetAuthorityPlayer();
         public abstract bool IsAuthoritativeHere();
         public abstract int GetRoleRevision();
+        // Read-only UI capability on the requesting client. Existing policies
+        // fail closed until they explicitly provide this local query. This
+        // never replaces the arbiter-side CanPublishCatalog authorization.
+        public virtual bool CanEditCatalogLocally(VRCPlayerApi actor, int expectedRoleRevision) => false;
         public abstract bool CanPublishCatalog(VRCPlayerApi actor, int expectedRoleRevision);
     }
 }

@@ -49,7 +49,7 @@ namespace JLChnToZ.VRC.VVMW {
             authority.catalog.gameObject.activeInHierarchy && authority.catalog.authority == authority &&
             Utilities.IsValid(authority.policy) && authority.policy.enabled && authority.policy.gameObject.activeInHierarchy;
         bool Authorized() => Graph() && Utilities.IsValid(Networking.LocalPlayer) &&
-            authority.policy.CanPublishCatalog(Networking.LocalPlayer, authority.policy.GetRoleRevision());
+            authority.policy.CanEditCatalogLocally(Networking.LocalPlayer, authority.policy.GetRoleRevision());
         bool Fields() => mirrorInputs != null && mirrorInputs.Length == 2 &&
             Utilities.IsValid(mirrorInputs[0]) && Utilities.IsValid(mirrorInputs[1]) &&
             nameInputs != null && nameInputs.Length == 3 && Utilities.IsValid(nameInputs[0]) &&
