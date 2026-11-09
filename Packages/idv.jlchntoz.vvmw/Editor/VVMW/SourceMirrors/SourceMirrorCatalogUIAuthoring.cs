@@ -30,7 +30,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             layout.childForceExpandWidth = true; layout.childForceExpandHeight = false;
             return rect;
         }
-        static InputField Field(string name, Transform parent, VRCUrlInputField template, bool url) {
+        static Selectable Field(string name, Transform parent, VRCUrlInputField template, bool url) {
             var rect = Rect(name, parent); Size(rect, PanelWidth - 48, TargetHeight);
             var image = Surface(rect, template.targetGraphic as Image);
             var textRect = Rect("Text", rect);
@@ -41,11 +41,16 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             text.color = template.textComponent.color; text.material = template.textComponent.material;
             text.supportRichText = false; text.resizeTextForBestFit = false; text.alignment = TextAnchor.MiddleLeft;
             text.horizontalOverflow = HorizontalWrapMode.Overflow; text.raycastTarget = false;
-            InputField input = url ? rect.gameObject.AddComponent<VRCUrlInputField>() : rect.gameObject.AddComponent<InputField>();
-            input.textComponent = text; input.targetGraphic = image; input.colors = template.colors;
-            input.lineType = InputField.LineType.SingleLine;
+            Selectable input;
+            if (url) {
+                var field = rect.gameObject.AddComponent<VRCUrlInputField>();
+                field.textComponent = text; field.lineType = VRCUrlInputField.LineType.SingleLine; input = field;
+            } else {
+                var field = rect.gameObject.AddComponent<InputField>(); field.textComponent = text;
+                field.lineType = InputField.LineType.SingleLine; field.characterLimit = 128; input = field;
+            }
+            input.targetGraphic = image; input.colors = template.colors;
             input.navigation = new Navigation { mode = Navigation.Mode.None };
-            input.characterLimit = url ? 4096 : 128;
             return input;
         }
         public static SourceMirrorCatalogUI Create(RectTransform parent, SourceMirrorCatalogAuthority authority, UIHandler controls) {
@@ -91,7 +96,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             view.nameInputs = new InputField[3]; view.mirrorInputs = new VRCUrlInputField[2];
             view.nameCaptions = new Graphic[3]; view.urlCaptions = new Graphic[2];
             view.nameCaptions[0] = Text("Primary Name Caption", popup, textTemplate, 24, 18, "Primary source name");
-            view.nameInputs[0] = Field("Primary Name", popup, inputTemplate, false);
+            view.nameInputs[0] = (InputField)Field("Primary Name", popup, inputTemplate, false);
             for (int i = 1; i < 3; i++) {
                 var row = Rect("Mirror " + i, popup); Size(row, PanelWidth - 48, 84);
                 var layout = row.gameObject.AddComponent<HorizontalLayoutGroup>(); layout.spacing = Gap;
@@ -101,7 +106,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                 namesSize.minWidth = namesSize.preferredWidth = 200;
                 var urls = Vertical("URL", row); urls.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
                 view.nameCaptions[i] = Text("Name Caption", names, textTemplate, 24, 18, "Mirror " + i);
-                view.nameInputs[i] = Field("Name", names, inputTemplate, false);
+                view.nameInputs[i] = (InputField)Field("Name", names, inputTemplate, false);
                 view.urlCaptions[i - 1] = Text("URL Caption", urls, textTemplate, 24, 18, "Full URL · optional");
                 view.mirrorInputs[i - 1] = (VRCUrlInputField)Field("URL", urls, inputTemplate, true);
             }
