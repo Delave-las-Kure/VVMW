@@ -346,7 +346,7 @@ namespace JLChnToZ.VRC.VVMW {
                     case PAUSED: target = time * 0.001F; break;
                     default: return 0;
                 }
-                float duration = localTransportActiveForUfc ? localTransportDurationForUfc : Duration;
+                float duration = localTransportActiveForUfc || HasLocalTransportPresentationForUfc() ? localTransportDurationForUfc : Duration;
                 if (duration > 0 && !float.IsInfinity(duration))
                     target = loop ? Mathf.Repeat(target, duration) : Mathf.Clamp(target, 0, duration);
                 else target = Mathf.Max(0, target);

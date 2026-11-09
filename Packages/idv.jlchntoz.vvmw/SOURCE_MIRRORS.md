@@ -83,6 +83,31 @@ UFC-адаптация и точные преобразования сущест
 По умолчанию sink отсутствует, прежний video-only путь сохранён. Локальные
 проверки с seeded textures не заменяют AVPro/Photon/HMD и приёмку основного мира.
 
+### Общие команды и сохранение состояния (T134)
+
+`CanControlRoomPlaybackForUfc`, `IsRoomPlayingForUfc`,
+`RoomPlaybackDurationForUfc` и `RoomPlaybackTimeForUfc` — read-only факты принятого
+общего запуска с проверкой канонической идентичности. Они не дают права на
+команду и не подменяют native `IsReady`, `Time`, `Duration` или общий clock.
+Длительность личной загрузки берётся из matching transport transaction;
+отсутствие локального Ready само по себе не блокирует команды остальным зрителям.
+При команде в последнем pending-ack сохраняется та же generation/anchor, а новое
+выравнивание выполняет существующая транзакция. Новый URL не загружается.
+
+`CanCapturePlaybackForUfc` закрыт в private pending, локальной ошибке, до принятия
+общего состояния и при некорректном времени. UFC session сохраняет предыдущий
+checkpoint до окончания picture gate. Физические mirror URLs туда не попадают.
+Это проверка пригодности локального снимка, а не PlayerObject/persistence права.
+
+Точные UFC consumer transforms включают явный default-false
+`useForkRoomPlayback` у обеих оболочек и session. Профиль применяется только с
+проверенным форком и synced Core; прежний command bridge не используется.
+Существующие UFC права и Frontend lock проверяются при каждом действии.
+Seek drag, ±10s, UI availability и callback читают одни факты. Без этого профиля
+сохраняется штатный путь; типы SourceMirrors не требуются общему Core API.
+Квалификация ClientSim использует явно seeded header/decoder/restored inputs;
+она не заменяет AVPro/Photon, фактическое восстановление persistence или client smoke.
+
 ## Локальный каталог (T122)
 
 `SourceMirrorCatalog` добавляет локальный проверяемый снимок текущего фильма:

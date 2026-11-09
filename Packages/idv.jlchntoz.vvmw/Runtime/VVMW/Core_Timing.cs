@@ -118,6 +118,7 @@ namespace JLChnToZ.VRC.VVMW {
                 return activeHandler.Time / duration;
             }
             set {
+                if (!float.IsNaN(value) && !float.IsInfinity(value)) ReopenPresentationForRoomCommandForUfc();
                 if (localTransportActiveForUfc) {
                     if (localTransportDurationForUfc > 0)
                         SetSharedTimeDuringLocalTransportForUfc(localTransportDurationForUfc * value);

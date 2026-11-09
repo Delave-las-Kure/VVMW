@@ -573,6 +573,7 @@ namespace JLChnToZ.VRC.VVMW {
         /// </summary>
         public void Play() {
             if (!Utilities.IsValid(activeHandler)) return;
+            ReopenPresentationForRoomCommandForUfc();
             if (HasLocalTransportIdentityForUfc()) {
                 SetLocalTransportIntentForUfc(PLAYING, SharedTargetTimeForUfc);
                 RequestSync();
@@ -587,6 +588,7 @@ namespace JLChnToZ.VRC.VVMW {
         /// </summary>
         public void Pause() {
             if (!Utilities.IsValid(activeHandler)) return;
+            ReopenPresentationForRoomCommandForUfc();
             if (HasLocalTransportIdentityForUfc()) {
                 SetLocalTransportIntentForUfc(PAUSED, SharedTargetTimeForUfc);
                 RequestSync();
