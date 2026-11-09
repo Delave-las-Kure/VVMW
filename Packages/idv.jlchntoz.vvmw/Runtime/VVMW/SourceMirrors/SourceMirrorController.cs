@@ -25,6 +25,8 @@ namespace JLChnToZ.VRC.VVMW {
         // Read-only presentation facts for optional source controls.
         public bool HasPresentationWiring => Configured();
         public bool IsTurningOff => disabling;
+        VRCUrl lastAcceptedPhysical;
+        public VRCUrl LastAcceptedPhysicalUrl => lastAcceptedPhysical;
 
         public bool CanDetach => mirrorsOff && !held && !pending &&
             Utilities.IsValid(core) && !core.IsLocalTransportActiveForUfc && !core.IsLocalTransportPresentationPendingForUfc;
@@ -127,7 +129,7 @@ namespace JLChnToZ.VRC.VVMW {
                 if (!pending) { Release();DetachUnlessWatching(); }
                 diagnostic="Local source request rejected";return;
             }
-            requestAccepted=true;failed=false;mirrorsOff=false;
+            requestAccepted=true;failed=false;mirrorsOff=false;lastAcceptedPhysical=physical;
             if (generation==0) { pending=false;Release();Finish();return; }
             startedAt=Time.realtimeSinceStartup;
             acceptedRevision=-1;stableSamples=phase=0;previousRaw=-1;alignments=0;

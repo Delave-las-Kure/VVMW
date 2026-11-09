@@ -118,9 +118,14 @@ namespace JLChnToZ.VRC.VVMW {
             if (!mirrors.AutoEnabled && mirrors.SelectedSourceId == id &&
                 mirrors.SelectedPlaybackId == playback && mirrors.SelectedCatalogVersion == version &&
                 HasCurrentCatalog() && mirrors.sourceCatalog.Version == version &&
-                mirrors.sourceCatalog.ContextPlaybackId == playback) {
+                mirrors.sourceCatalog.ContextPlaybackId == playback &&
+                (mirrors.ActiveSourceId == id ||
+                    ((mirrors.pending || mirrors.failed) && !VRCUrl.IsNullOrEmpty(mirrors.LastAcceptedPhysicalUrl) &&
+                    mirrors.LastAcceptedPhysicalUrl.Equals(mirrors.sourceCatalog.GetSourceUrl(index))))) {
                 _Refresh(); return;
             }
+            // Off/On retains the old selection receipt but hands playback to
+            // primary. That old ID alone must not suppress an explicit reapply.
             // Do not rebind an index to a newer catalog before validating this click.
             Complete(mirrors.SelectSource(id, version, playback));
         }
