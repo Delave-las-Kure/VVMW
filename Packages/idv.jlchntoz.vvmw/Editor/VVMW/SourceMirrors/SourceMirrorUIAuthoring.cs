@@ -21,7 +21,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
         static void Need(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
         static RectTransform Rect(string name, Transform parent) {
             var rect = new GameObject(name, typeof(RectTransform)).GetComponent<RectTransform>();
-            rect.SetParent(parent, false); return rect;
+            rect.SetParent(parent, false); rect.gameObject.layer = parent.gameObject.layer; return rect;
         }
         static void Size(RectTransform rect, float width, float height) {
             rect.sizeDelta = new Vector2(width, height);
@@ -115,6 +115,9 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             LanguageManager language, Button buttonTemplate, Graphic textTemplate) {
             Need(!EditorApplication.isPlayingOrWillChangePlaymode, "Compose source controls in Edit Mode.");
             Need(parent && parent.GetComponentInParent<Canvas>(), "Choose a parent in the existing Canvas.");
+            var canvas = parent.GetComponentInParent<Canvas>();
+            Need(canvas.renderMode == RenderMode.WorldSpace && canvas.gameObject.layer != 5,
+                "Use a world-space Canvas on Default or another world-interaction layer, not reserved UI layer5.");
             Need(mirrors && mirrors.core && parent.gameObject.scene == mirrors.gameObject.scene,
                 "The source controls and mirror controller must share the Core scene.");
             Need(buttonTemplate && buttonTemplate.targetGraphic is Image &&
@@ -193,6 +196,9 @@ namespace JLChnToZ.VRC.VVMW.Editors {
         public static void Validate(SourceMirrorUI view) {
             Need(view && view.mirrors && view.panel && view.entryButton && view.autoButton && view.retryButton && view.enableButton,
                 "Source UI references are incomplete.");
+            var canvas = view.GetComponentInParent<Canvas>();
+            Need(canvas && canvas.renderMode == RenderMode.WorldSpace && canvas.gameObject.layer != 5,
+                "Personal sources need a world-space Canvas outside reserved UI layer5.");
             Need(view.sourceButtons != null && view.sourceButtons.Length == 3 && view.sourceButtons.All(x => x) &&
                 view.sourceTexts != null && view.sourceTexts.Length == 3 && view.sourceTexts.All(x => x) &&
                 view.sourceSelected != null && view.sourceSelected.Length == 3 && view.sourceSelected.All(x => x),
