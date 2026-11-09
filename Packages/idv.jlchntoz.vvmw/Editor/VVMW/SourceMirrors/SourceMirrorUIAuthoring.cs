@@ -19,24 +19,24 @@ namespace JLChnToZ.VRC.VVMW.Editors {
         public const float Width = 560, TargetHeight = 52, SourceHeight = 60, Gap = 8;
 
         static void Need(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
-        static RectTransform Rect(string name, Transform parent) {
+        internal static RectTransform Rect(string name, Transform parent) {
             var rect = new GameObject(name, typeof(RectTransform)).GetComponent<RectTransform>();
             rect.SetParent(parent, false); rect.gameObject.layer = parent.gameObject.layer; return rect;
         }
-        static void Size(RectTransform rect, float width, float height) {
+        internal static void Size(RectTransform rect, float width, float height) {
             rect.sizeDelta = new Vector2(width, height);
             var element = rect.gameObject.AddComponent<LayoutElement>();
             element.minHeight = element.preferredHeight = height;
             element.flexibleHeight = 0;
         }
-        static Image Surface(RectTransform rect, Image template) {
+        internal static Image Surface(RectTransform rect, Image template) {
             var image = rect.gameObject.AddComponent<Image>();
             image.sprite = template.sprite; image.type = template.type;
             image.material = template.material; image.color = template.color;
             image.pixelsPerUnitMultiplier = template.pixelsPerUnitMultiplier;
             return image;
         }
-        static Graphic Text(string name, Transform parent, Graphic template, float height, float size, string value) {
+        internal static Graphic Text(string name, Transform parent, Graphic template, float height, float size, string value) {
             var rect = Rect(name, parent); Size(rect, Width - 48, height);
             var tmpTemplate = template as TextMeshProUGUI;
             if (tmpTemplate) {
@@ -59,7 +59,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             legacy.alignment = TextAnchor.UpperLeft; legacy.horizontalOverflow = HorizontalWrapMode.Wrap;
             legacy.verticalOverflow = VerticalWrapMode.Truncate; legacy.text = value; return legacy;
         }
-        static Button Button(string name, Transform parent, Button template, Graphic textTemplate,
+        internal static Button Button(string name, Transform parent, Button template, Graphic textTemplate,
             float height, string caption, out Graphic text, out GameObject selected) {
             var rect = Rect(name, parent); Size(rect, Width - 48, height);
             var image = Surface(rect, template.targetGraphic as Image);
