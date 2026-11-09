@@ -14,12 +14,12 @@ namespace JLChnToZ.VRC.VVMW.Editors {
     public static class SourceMirrorAuthoring {
         const string ProgramFolder = "Packages/idv.jlchntoz.vvmw/Runtime/VVMW/SourceMirrors/";
 
-        static SerializedProperty Property(UnityEngine.Object obj, string name) => new SerializedObject(obj).FindProperty(name);
-        static T[] Array<T>(UnityEngine.Object obj, string name) where T : UnityEngine.Object {
+        internal static SerializedProperty Property(UnityEngine.Object obj, string name) => new SerializedObject(obj).FindProperty(name);
+        internal static T[] Array<T>(UnityEngine.Object obj, string name) where T : UnityEngine.Object {
             var property = Property(obj, name);
             return Enumerable.Range(0, property.arraySize).Select(i => property.GetArrayElementAtIndex(i).objectReferenceValue as T).ToArray();
         }
-        static void Array(UnityEngine.Object obj, string name, UnityEngine.Object[] values) {
+        internal static void Array(UnityEngine.Object obj, string name, UnityEngine.Object[] values) {
             var serialized = new SerializedObject(obj);
             var property = serialized.FindProperty(name);
             property.arraySize = values.Length;
@@ -31,12 +31,12 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             serialized.FindProperty(name).objectReferenceValue = value;
             serialized.ApplyModifiedProperties();
         }
-        static T[] SceneObjects<T>() where T : Component => Resources.FindObjectsOfTypeAll<T>()
+        internal static T[] SceneObjects<T>() where T : Component => Resources.FindObjectsOfTypeAll<T>()
             .Where(x => x && x.gameObject.scene.IsValid() && !EditorUtility.IsPersistent(x)).ToArray();
-        static AudioSource Output(AbstractAudioController gate) => Property(gate, "audioSource").objectReferenceValue as AudioSource;
-        static Core Owner(AbstractAudioController gate) => Property(gate, "core").objectReferenceValue as Core;
-        static void Need(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
-        static void Editable(Core core) {
+        internal static AudioSource Output(AbstractAudioController gate) => Property(gate, "audioSource").objectReferenceValue as AudioSource;
+        internal static Core Owner(AbstractAudioController gate) => Property(gate, "core").objectReferenceValue as Core;
+        internal static void Need(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); }
+        internal static void Editable(Core core) {
             Need(!EditorApplication.isPlayingOrWillChangePlaymode, "Install/remove only in Edit Mode after a completed Off.");
             Need(core && core.gameObject.scene.IsValid() && !EditorUtility.IsPersistent(core), "Select a scene Core.");
         }
@@ -61,6 +61,9 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             Need(screens != null && screens.Length > 0 && screens.All(x => x && x.gameObject.scene == core.gameObject.scene) &&
                 screens.Distinct().Count() == screens.Length, "Choose distinct video-only renderers in the Core scene.");
             var gates = controller.audioGates;
+            if (controller.existingAudioControllers != null && controller.existingAudioControllers.Length > 0)
+                SourceMirrorAudioAuthoring.Validate(controller);
+            else {
             Need(gates != null && gates.Length > 0 && gates.All(x => x && x.enabled && x.gameObject.activeInHierarchy) &&
                 gates.Distinct().Count() == gates.Length, "Choose distinct, active output gates.");
             var outputs = gates.Select(Output).ToArray();
@@ -81,9 +84,10 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                 Need(!SceneObjects<AbstractAudioController>().Any(x => x != gate && Output(x) == output),
                     "Another scene audio controller targets the same AudioSource.");
             }
+            }
             foreach (var other in SceneObjects<SourceMirrorController>().Where(x => x != controller)) {
                 Need(other.videoOnlyRenderers == null || !other.videoOnlyRenderers.Intersect(screens).Any(), "Two controllers share a video renderer.");
-                Need(other.audioGates == null || !other.audioGates.Intersect(gates).Any(), "Two controllers share an output gate.");
+                Need(gates == null || other.audioGates == null || !other.audioGates.Intersect(gates).Any(), "Two controllers share an output gate.");
             }
             ValidatePrograms();
             if (controller.sourceCatalog && controller.sourceCatalog.authority)
@@ -159,8 +163,17 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             }
         }
 
+        /// <summary>Explicitly opt qualified subclasses into the existing-controller audio profile.</summary>
+        public static SourceMirrorController InstallWithAudioControllers(Core core, VRCUrl canonical,
+            Renderer[] screens, AbstractAudioController[] outputs, Type[] compatibleControllerTypes) =>
+            SourceMirrorAudioAuthoring.Install(core, canonical, screens, outputs, compatibleControllerTypes);
+
         public static void Remove(SourceMirrorController controller) {
             Need(controller, "Select the source-mirror controller.");
+            if (controller.existingAudioControllers != null && controller.existingAudioControllers.Length > 0) {
+                SourceMirrorAudioAuthoring.Remove(controller);
+                return;
+            }
             var core = controller.core;
             Editable(core);
             Validate(controller);

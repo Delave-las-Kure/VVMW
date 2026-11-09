@@ -12,6 +12,13 @@ namespace JLChnToZ.VRC.VVMW {
         public VRCUrl canonical, requestedPhysical;
         public Renderer[] videoOnlyRenderers;
         public SourceMirrorOutputGate[] audioGates;
+        // Explicit alternative to direct gates; retain the world's existing gain controllers.
+        public AbstractAudioController[] existingAudioControllers;
+        [HideInInspector] public string[] existingAudioControllerTypes;
+        [HideInInspector] public bool existingAudioRoutesCaptured;
+        [HideInInspector] public AudioSource[] audioSourcesBeforeInstall;
+        [HideInInspector] public AbstractAudioController[] audioControllersBeforeInstall;
+        [HideInInspector] public bool[] preserveRoutesBeforeInstall;
         public bool requestAccepted, pending, failed, picturePresented, mirrorsOff;
         public string diagnostic;
         public float transitionTimeout = 25f;
@@ -33,15 +40,26 @@ namespace JLChnToZ.VRC.VVMW {
 
         bool Configured() {
             if (!Utilities.IsValid(core) || VRCUrl.IsNullOrEmpty(canonical) ||
-                videoOnlyRenderers == null || videoOnlyRenderers.Length == 0 ||
-                audioGates == null || audioGates.Length == 0) return false;
+                videoOnlyRenderers == null || videoOnlyRenderers.Length == 0) return false;
             for (int i=0;i<videoOnlyRenderers.Length;i++) {
                 if (!Utilities.IsValid(videoOnlyRenderers[i])) return false;
                 for (int j=0;j<i;j++) if (videoOnlyRenderers[i] == videoOnlyRenderers[j]) return false;
             }
-            for (int i=0;i<audioGates.Length;i++) {
-                if (!Utilities.IsValid(audioGates[i]) || !audioGates[i].IsWiredFor(core)) return false;
-                for (int j=0;j<i;j++) if (audioGates[i].Output == audioGates[j].Output) return false;
+            if (existingAudioControllers != null && existingAudioControllers.Length > 0) {
+                if (audioGates != null && audioGates.Length > 0) return false;
+                for (int i=0;i<existingAudioControllers.Length;i++) {
+                    var output = existingAudioControllers[i];
+                    if (!Utilities.IsValid(output) || output.AudioOutputCoreForUfc != core || !output.enabled || !output.gameObject.activeInHierarchy ||
+                        !core.OwnsExclusiveAudioOutputForUfc(output, output.OutputAudioSourceForUfc) ||
+                        !output.CanHoldOutputForUfc(this)) return false;
+                    for (int j=0;j<i;j++) if (output.OutputAudioSourceForUfc == existingAudioControllers[j].OutputAudioSourceForUfc) return false;
+                }
+            } else {
+                if (audioGates == null || audioGates.Length == 0) return false;
+                for (int i=0;i<audioGates.Length;i++) {
+                    if (!Utilities.IsValid(audioGates[i]) || !audioGates[i].IsWiredFor(core)) return false;
+                    for (int j=0;j<i;j++) if (audioGates[i].Output == audioGates[j].Output) return false;
+                }
             }
             return true;
         }
@@ -81,7 +99,9 @@ namespace JLChnToZ.VRC.VVMW {
             if (!held) {
                 rendererWasEnabled = new bool[videoOnlyRenderers.Length];
                 for (int i=0;i<videoOnlyRenderers.Length;i++) rendererWasEnabled[i]=videoOnlyRenderers[i].enabled;
-                for (int i=0;i<audioGates.Length;i++) audioGates[i].Hold();
+                if (existingAudioControllers != null && existingAudioControllers.Length > 0) {
+                    for (int i=0;i<existingAudioControllers.Length;i++) existingAudioControllers[i].HoldOutputForUfc(this);
+                } else for (int i=0;i<audioGates.Length;i++) audioGates[i].Hold();
                 held=true;
             }
             picturePresented=false;
@@ -94,7 +114,10 @@ namespace JLChnToZ.VRC.VVMW {
         void Release() {
             if (!held) return;
             Show();
-            for (int i=0;i<audioGates.Length;i++) audioGates[i].Release();
+            if (existingAudioControllers != null && existingAudioControllers.Length > 0) {
+                for (int i=0;i<existingAudioControllers.Length;i++)
+                    if (Utilities.IsValid(existingAudioControllers[i])) existingAudioControllers[i].ReleaseOutputForUfc(this);
+            } else for (int i=0;i<audioGates.Length;i++) audioGates[i].Release();
             held=false;
         }
         void Queue() {
