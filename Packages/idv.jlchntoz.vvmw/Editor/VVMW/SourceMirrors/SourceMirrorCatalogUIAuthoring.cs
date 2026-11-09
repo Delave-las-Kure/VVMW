@@ -113,8 +113,12 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             var confirmation = Rect("Compatible Edit", popup); Size(confirmation, PanelWidth - 48, 64);
             Surface(confirmation, buttonTemplate.targetGraphic as Image);
             var toggle = confirmation.gameObject.AddComponent<Toggle>(); toggle.colors = buttonTemplate.colors;
-            var check = Rect("Check", confirmation); check.anchorMin = check.anchorMax = new Vector2(0, .5F);
-            check.sizeDelta = new Vector2(20, 20); check.anchoredPosition = new Vector2(18, 0);
+            var box = Rect("Checkbox", confirmation); box.anchorMin = box.anchorMax = new Vector2(0, .5F);
+            box.sizeDelta = new Vector2(24, 24); box.anchoredPosition = new Vector2(18, 0);
+            var outline = Surface(box, buttonTemplate.targetGraphic as Image); outline.color = textTemplate.color; outline.raycastTarget = false;
+            var inset = Rect("Inset", box); inset.sizeDelta = new Vector2(20, 20);
+            Surface(inset, buttonTemplate.targetGraphic as Image).raycastTarget = false;
+            var check = Rect("Check", box); check.sizeDelta = new Vector2(14, 14);
             var checkImage = check.gameObject.AddComponent<Image>(); checkImage.color = buttonTemplate.colors.pressedColor;
             checkImage.raycastTarget = false; toggle.graphic = checkImage;
             view.confirmationText = Text("Caption", confirmation, textTemplate, 64, 18, "Same edit, start and speed");
