@@ -16,6 +16,8 @@ namespace JLChnToZ.VRC.VVMW {
     [AddComponentMenu("VizVid/Source Mirrors/Shared Catalog UI")]
     public class SourceMirrorCatalogUI : UdonSharpBehaviour {
         public SourceMirrorCatalogAuthority authority;
+        // Optional previous layer, opened only after this view confirms its Save.
+        public SourceMirrorUI sourceSelection;
         [BindUdonSharpEvent(nameof(_OnLanguageChanged))] public LanguageManager languageManager;
         public int fallbackLanguage;
         public GameObject panel;
@@ -57,7 +59,7 @@ namespace JLChnToZ.VRC.VVMW {
             }
         }
 
-        bool bound, tickQueued, discardArmed;
+        bool bound, tickQueued, discardArmed, closeAfterSave;
         int role, language;
         VRCUrl primary;
         string playback = "", version = "", film = "", tag = "", request = "", feedback = "";
@@ -84,12 +86,14 @@ namespace JLChnToZ.VRC.VVMW {
         void Start() { _OnLanguageChanged(); }
         void OnEnable() { _OnLanguageChanged(); }
         void OnDisable() {
+            closeAfterSave = false;
             if (Utilities.IsValid(entryButton)) entryButton.interactable = false;
             if (Utilities.IsValid(panel)) panel.SetActive(false);
         }
         public void _Open() {
             if (!LocalAction() || !Utilities.IsValid(panel)) return;
             bool wasOpen = IsOpen; panel.SetActive(true);
+            if (!wasOpen) closeAfterSave = false;
             // Closing never cancels a submitted publication. Reopen keeps its
             // draft/status until the existing authority finishes the request.
             if (!wasOpen && !(Graph() && authority.PublicationPending && authority.PendingRequestId == request) &&
@@ -98,7 +102,7 @@ namespace JLChnToZ.VRC.VVMW {
         }
         public void _Close() {
             if (!LocalAction() || !Utilities.IsValid(panel)) return;
-            panel.SetActive(false); discardArmed = false;
+            panel.SetActive(false); discardArmed = closeAfterSave = false;
             if (feedback == "DiscardFirst") feedback = "";
         }
         public void _Reload() {
@@ -109,7 +113,7 @@ namespace JLChnToZ.VRC.VVMW {
             ReadDraft(); _Refresh();
         }
         void ReadDraft() {
-            bound = false; feedback = request = ""; discardArmed = false;
+            bound = false; feedback = request = ""; discardArmed = closeAfterSave = false;
             submittedLabels = new string[0]; submittedMirrors = new VRCUrl[0];
             expandedMirrors = new bool[2];
             if (Fields()) {
@@ -167,10 +171,10 @@ namespace JLChnToZ.VRC.VVMW {
             }
             submittedLabels = new[] { nameInputs[0].text, nameInputs[1].text, nameInputs[2].text };
             submittedMirrors = new[] { first, second };
-            request = Guid.NewGuid().ToString("N"); feedback = ""; discardArmed = false;
+            request = Guid.NewGuid().ToString("N"); feedback = ""; discardArmed = false; closeAfterSave = true;
             bool accepted = authority.RequestPublishCurrentCatalog(role, version, playback, request,
                 urls, sourceIds, labels, new[] { film, tag });
-            if (!accepted) feedback = "Rejected";
+            if (!accepted) { feedback = "Rejected"; closeAfterSave = false; }
             _Refresh();
         }
         string SourceId(VRCUrl url) {
@@ -273,8 +277,14 @@ namespace JLChnToZ.VRC.VVMW {
                 authority.core.HasSharedPlaybackContextForUfc && authority.core.SharedPlaybackIdForUfc == playback &&
                 authority.policy.GetRoleRevision() == role && SubmittedFieldsUnchanged()) {
                 float position = Utilities.IsValid(fieldsScroll) ? fieldsScroll.verticalNormalizedPosition : 1;
+                bool returnToSelection = closeAfterSave;
                 ReadDraft(); feedback = "Confirmed";
                 if (Utilities.IsValid(fieldsScroll)) fieldsScroll.verticalNormalizedPosition = position;
+                if (returnToSelection) {
+                    _Close();
+                    if (Utilities.IsValid(sourceSelection)) sourceSelection._Open();
+                    return;
+                }
             }
             if (feedback == "Confirmed" && HasLocalEdits) feedback = "";
             // A clean read-only view follows the accepted list. An editor's
