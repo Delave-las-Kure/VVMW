@@ -31,6 +31,8 @@ namespace JLChnToZ.VRC.VVMW {
         double syncLatency;
         float lastSyncRawTime;
         bool isBuffering;
+        float lastRequestedTime;
+        bool timeChangeRequested;
         bool isResyncTime;
         bool isCheckingRangeLoop;
         DateTime lastSyncTime;
@@ -49,10 +51,20 @@ namespace JLChnToZ.VRC.VVMW {
             get => Utilities.IsValid(activeHandler) ? activeHandler.Time : 0;
             private set {
                 if (IsRangeLooping) value = CalculateLoopTime(value);
-                activeHandler.Time = value;
-                lastSyncRawTime = value;
+                // SetTime may complete asynchronously. Compare future samples with
+                // an observed position, never with the requested target.
+                lastSyncRawTime = activeHandler.Time;
+                lastRequestedTime = value;
+                timeChangeRequested = true;
                 isBuffering = false; // Reset buffering state
+                activeHandler.Time = value;
             }
+        }
+
+        void ResetSyncTimeSamples() {
+            lastSyncRawTime = Utilities.IsValid(activeHandler) ? activeHandler.Time : 0;
+            timeChangeRequested = false;
+            isBuffering = false;
         }
 
         /// <summary>
@@ -82,6 +94,7 @@ namespace JLChnToZ.VRC.VVMW {
                 if (syncOffset == value) return;
                 syncOffset = value;
                 SendEvent("_OnSyncOffsetChange");
+                if (localTransportActiveForUfc) { localTransportRevisionForUfc++; return; }
                 if (synced && Utilities.IsValid(activeHandler) && activeHandler.IsPlaying) {
                     var duration = activeHandler.Duration;
                     if (duration <= 0 || float.IsInfinity(duration)) return;
@@ -105,9 +118,16 @@ namespace JLChnToZ.VRC.VVMW {
                 return activeHandler.Time / duration;
             }
             set {
+                if (!float.IsNaN(value) && !float.IsInfinity(value)) ReopenPresentationForRoomCommandForUfc();
+                if (localTransportActiveForUfc) {
+                    if (localTransportDurationForUfc > 0)
+                        SetSharedTimeDuringLocalTransportForUfc(localTransportDurationForUfc * value);
+                    return;
+                }
                 if (!Utilities.IsValid(activeHandler)) return;
                 var duration = activeHandler.Duration;
                 if (duration <= 0 || float.IsInfinity(duration)) return;
+                if (SetPausedProgressForPresenterForUfc(duration * value)) return;
                 Time = duration * value;
                 RequestSync();
             }
@@ -128,7 +148,13 @@ namespace JLChnToZ.VRC.VVMW {
             get => speed;
             set {
                 if (speed == value) return;
+                ReopenPresentationForRoomCommandForUfc();
+                float transportTarget = localTransportActiveForUfc ? SharedTargetTimeForUfc : 0;
                 speed = Mathf.Clamp(value, 0.1F, 2);
+                if (localTransportActiveForUfc) {
+                    actualSpeed = Utilities.IsValid(activeHandler) && activeHandler.SupportSpeedAdjustment ? speed : 1;
+                    SetLocalTransportIntentForUfc(state, transportTarget);
+                }
                 SyncSpeed();
                 RequestSync();
             }
@@ -162,11 +188,17 @@ namespace JLChnToZ.VRC.VVMW {
         /// Internal use only. Do not call this method.
         /// </summary>
         public override void OnOwnershipTransferred(VRCPlayerApi player) {
+            ResetSyncTimeSamples();
+            InvalidateLocalTransportAuthorityForUfc();
             if (!player.isLocal) isLocalReloading = false;
             syncLatency = 0;
+            if (player.isLocal && localTransportInitialOpeningForUfc && state == LOADING &&
+                localTransportReadyForUfc && Utilities.IsValid(activeHandler) && activeHandler.IsReady && !isError)
+                OnVideoReady(); // A real Ready received before becoming owner still establishes the first clock once.
         }
 
         void StartSyncTime() {
+            if (localTransportActiveForUfc) return;
             StartCheckRangeLoop();
             if (!synced) return;
             SyncTime(true);
@@ -188,14 +220,20 @@ namespace JLChnToZ.VRC.VVMW {
         public
 #endif
         void _AutoSyncTime() {
-            if (!gameObject.activeInHierarchy || !enabled || isLoading || isLocalReloading || !Utilities.IsValid(activeHandler) || !activeHandler.IsReady) {
+            if (localTransportActiveForUfc) {
+                if (!CanRunLocalTransportSyncForUfc()) { isResyncTime = false; return; }
+                if (!AcknowledgeLocalTransportSeekForUfc()) {
+                    SendCustomEventDelayedSeconds(nameof(_AutoSyncTime), 0.5F);
+                    return;
+                }
+            } else if (!gameObject.activeInHierarchy || !enabled || isLoading || isLocalReloading || !Utilities.IsValid(activeHandler) || !activeHandler.IsReady) {
                 isResyncTime = false;
                 return;
             }
             var duration = activeHandler.Duration;
             if (duration <= 0 || float.IsInfinity(duration)) {
                 isResyncTime = false;
-                RequestSerialization();
+                if (!localTransportActiveForUfc) RequestSerialization();
                 return;
             }
             SyncTime(false);
@@ -236,7 +274,8 @@ namespace JLChnToZ.VRC.VVMW {
         }
 
         void SyncTime(bool forced) {
-            if (Networking.IsOwner(gameObject)) {
+            if (localTransportActiveForUfc && (!CanRunLocalTransportSyncForUfc() || localTransportSeekPendingForUfc)) return;
+            if (Networking.IsOwner(gameObject) && !localTransportActiveForUfc) {
                 if (!forced && Utilities.IsValid(activeHandler) && IsRangeLooping) {
                     var halfRange = rangeLoopDuration / 2;
                     var diff = CalculateLoopTime(CalcVideoTime()) - activeHandler.Time;
@@ -254,22 +293,28 @@ namespace JLChnToZ.VRC.VVMW {
             } else {
                 var duration = activeHandler.Duration;
                 if (duration <= 0 || float.IsInfinity(duration)) return;
-                float t = CalcVideoTime();
+                float t = localTransportActiveForUfc ? SharedTargetTimeForUfc : CalcVideoTime();
                 var t2 = activeHandler.Time;
                 // Is playing + time (progress) not changed since last check = video is buffering or paused
                 // Do not align the time this case as it may cause current non-ready buffer to be discard and rebuffered
                 // causing the video to be stuck in buffering state.
                 bool isPlaying = activeHandler.IsPlaying;
+                // A paused decoder also needs time to finish a seek. A newer
+                // paused target or an explicit forced sync must still take effect.
+                if (timeChangeRequested && t2 == lastSyncRawTime && !isPlaying && !forced &&
+                    Mathf.Abs((IsRangeLooping ? CalculateLoopTime(t) : t) - lastRequestedTime) < timeDriftDetectThreshold)
+                    return;
                 if (!isPlaying || t2 != lastSyncRawTime) {
                     // If it was buffering, we shift the time a bit further, estimates user loading time for catching up
                     if (isBuffering) {
-                        if (isPlaying) {
+                        if (isPlaying && !timeChangeRequested) {
                             float tCatchup = t2 - lastSyncRawTime;
                             if (tCatchup > timeDriftDetectThreshold) t += tCatchup;
                         }
                         isBuffering = false;
                     }
                     lastSyncRawTime = t2;
+                    timeChangeRequested = false;
                     if (!forced) {
                         if (loop) t2 = Mathf.Repeat(t2, duration);
                         forced = Mathf.Abs(t2 - t) >= timeDriftDetectThreshold;
@@ -277,6 +322,7 @@ namespace JLChnToZ.VRC.VVMW {
                 } else
                     isBuffering = isPlaying;
                 if (forced) {
+                    if (localTransportActiveForUfc) ArmLocalTransportSeekForUfc(t);
                     Time = t;
                     SendEvent("_OnTimeDrift");
                 }
@@ -289,7 +335,7 @@ namespace JLChnToZ.VRC.VVMW {
         /// <param name="start">The start time of the range loop in seconds. It must be non-negative and less than the end time.</param>
         /// <param name="end">The end time of the range loop in seconds. It must be greater than the start time.</param>
         public void SetRangeLoop(float start, float end) {
-            var duration = Duration;
+            var duration = localTransportActiveForUfc ? localTransportDurationForUfc : Duration;
             if (duration <= 0 || float.IsInfinity(duration)) {
                 _ClearRangeLoop();
                 return;
@@ -316,6 +362,10 @@ namespace JLChnToZ.VRC.VVMW {
                 SendEvent("_OnRangeLoopChange");
                 StartCheckRangeLoop();
             }
+            if (localTransportActiveForUfc) {
+                localTransportRevisionForUfc++;
+                RememberLocalTransportIntentForUfc();
+            }
         }
 
         /// <summary>
@@ -329,6 +379,10 @@ namespace JLChnToZ.VRC.VVMW {
             localRangeLoopStart = 0;
             localRangeLoopEnd = float.PositiveInfinity;
             rangeLoopDuration = 0;
+            if (localTransportActiveForUfc) {
+                localTransportRevisionForUfc++;
+                RememberLocalTransportIntentForUfc();
+            }
             SendEvent("_OnRangeLoopToggled");
             RequestSync();
         }
@@ -340,6 +394,7 @@ namespace JLChnToZ.VRC.VVMW {
         public
 #endif
         void _CheckRangeLoop() {
+            if (localTransportActiveForUfc) { isCheckingRangeLoop = false; return; }
             if (!Utilities.IsValid(activeHandler) || !activeHandler.IsPlaying || localRangeLoopStartMs < 0 || localRangeLoopEndMs <= localRangeLoopStartMs) {
                 isCheckingRangeLoop = false;
                 return;

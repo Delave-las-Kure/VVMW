@@ -99,7 +99,7 @@ namespace JLChnToZ.VRC.VVMW {
                 queuedTitle = $"\u200B{Networking.LocalPlayer.displayName}:\n{queuedTitle}";
             if (enableQueueList) {
                 bool isQueueEmpty = IsArrayNullOrEmpty(localQueuedUrls);
-                if (core.IsReady || core.IsLoading || !isQueueEmpty) {
+                if (core.IsReady || core.IsLoading || core.IsLocalTransportActiveForUfc || !isQueueEmpty) {
                     if (isQueueEmpty) {
                         localQueuedUrls = new VRCUrl[] { pcUrl };
                     } else {
@@ -239,7 +239,7 @@ namespace JLChnToZ.VRC.VVMW {
         }
 
         void GetLastPlayedUrl(out VRCUrl pcUrl, out VRCUrl questUrl, out byte playerIndex) {
-            if (core.IsReady) {
+            if (core.IsReady || core.IsLocalTransportActiveForUfc) {
 #if UNITY_ANDROID || UNITY_IOS
                 pcUrl = core.AltUrl;
                 questUrl = core.Url;

@@ -41,13 +41,126 @@ namespace JLChnToZ.VRC.VVMW {
         [SerializeField, HideInInspector, Resolve(".")] BaseVRCVideoPlayer videoPlayer;
         [SerializeField, HideInInspector, Resolve(".")] new Renderer renderer;
         RenderTexture bufferedTexture;
-        bool isWaitingForTexture, isReblitRunning, isLoadUrlRequested;
+        bool isWaitingForTexture, isReblitRunning, isLoadUrlRequested, isTexturePollScheduled, hasTexture;
         MaterialPropertyBlock propertyBlock;
         int texturePropertyID, speedParameterID;
         bool isRealTimeProtocol;
         bool afterFirstRun;
         float playbackSpeed = 1, actualPlaybackSpeed = 1;
         VRCUrl loadedUrl;
+        VRCUrl localCanonicalUrlForUfc, localPhysicalUrlForUfc, loadedPhysicalUrlForUfc;
+        bool localLoadPendingForUfc, localLoadIssuedForUfc, nativeLoadPresentForUfc, localLoadBlockedForUfc;
+        bool pictureStartedForUfc;
+        int localLoadGenerationForUfc, issuedLoadGenerationForUfc;
+
+        public VRCUrl LoadedPhysicalUrlForUfc => loadedPhysicalUrlForUfc;
+        public bool HasStartedLocalTransportPictureForUfc => pictureStartedForUfc && hasTexture;
+        public bool CanContinueLocalTransportLoadForUfc(int generation, VRCUrl canonicalUrl, VRCUrl physicalUrl) =>
+            isActive && !IsReady && localLoadPendingForUfc && !localLoadBlockedForUfc &&
+            localLoadGenerationForUfc == generation && localLoadIssuedForUfc &&
+            issuedLoadGenerationForUfc == generation && nativeLoadPresentForUfc && !isLoadUrlRequested &&
+            !VRCUrl.IsNullOrEmpty(canonicalUrl) && !VRCUrl.IsNullOrEmpty(physicalUrl) &&
+            !VRCUrl.IsNullOrEmpty(currentUrl) && currentUrl.Equals(canonicalUrl) &&
+            !VRCUrl.IsNullOrEmpty(loadedUrl) && loadedUrl.Equals(canonicalUrl) &&
+            !VRCUrl.IsNullOrEmpty(loadedPhysicalUrlForUfc) && loadedPhysicalUrlForUfc.Equals(physicalUrl);
+        public bool HasLocalTransportUrlForUfc(VRCUrl canonicalUrl) => !VRCUrl.IsNullOrEmpty(canonicalUrl) &&
+            !VRCUrl.IsNullOrEmpty(localPhysicalUrlForUfc) && canonicalUrl.Equals(localCanonicalUrlForUfc);
+
+        public void SetPreferredTransportUrlForUfc(VRCUrl canonicalUrl, VRCUrl physicalUrl) {
+            if (VRCUrl.IsNullOrEmpty(physicalUrl) || (!VRCUrl.IsNullOrEmpty(canonicalUrl) && canonicalUrl.Equals(physicalUrl))) {
+                localCanonicalUrlForUfc = localPhysicalUrlForUfc = null;
+            } else { localCanonicalUrlForUfc = canonicalUrl; localPhysicalUrlForUfc = physicalUrl; }
+        }
+
+        public void PrepareLocalTransportLoadForUfc(int generation) {
+            localLoadBlockedForUfc = false;
+            localLoadGenerationForUfc = generation;
+            localLoadPendingForUfc = true;
+            localLoadIssuedForUfc = false;
+            isReady = false;
+            loadedUrl = null; // Late old Ready cannot satisfy a queued replacement.
+        }
+
+        public void RetagLocalTransportLoadForUfc(int oldGeneration, int generation) {
+            if (localLoadGenerationForUfc != oldGeneration) return;
+            localLoadGenerationForUfc = generation;
+            if (issuedLoadGenerationForUfc == oldGeneration) issuedLoadGenerationForUfc = generation;
+        }
+
+        public bool CanReuseLocalTransportForUfc(VRCUrl canonicalUrl) => !videoPlayer.IsPlaying && IsReady &&
+            !VRCUrl.IsNullOrEmpty(currentUrl) && currentUrl.Equals(canonicalUrl) &&
+            !VRCUrl.IsNullOrEmpty(loadedPhysicalUrlForUfc) && loadedPhysicalUrlForUfc.Equals(ResolveLocalTransportUrlForUfc(canonicalUrl)) &&
+            videoPlayer.GetDuration() > 0 && !float.IsInfinity(videoPlayer.GetDuration());
+
+        public void AdoptLocalTransportLoadForUfc(int generation) {
+            localLoadGenerationForUfc = generation;
+            localLoadPendingForUfc = true;
+            localLoadIssuedForUfc = nativeLoadPresentForUfc && !isLoadUrlRequested &&
+                !VRCUrl.IsNullOrEmpty(loadedUrl) && loadedUrl.Equals(currentUrl);
+            if (localLoadIssuedForUfc) issuedLoadGenerationForUfc = generation;
+        }
+
+        public void FinishLocalTransportLoadForUfc(int generation) {
+            if (localLoadGenerationForUfc != generation) return;
+            localLoadPendingForUfc = false;
+        }
+
+        public void CancelLocalTransportLoadForUfc(int generation) {
+            if (localLoadGenerationForUfc != generation) return;
+            localLoadPendingForUfc = localLoadIssuedForUfc = false;
+            localLoadBlockedForUfc = true;
+            loadedUrl = null;
+            isReady = false;
+        }
+
+        public void AbortLocalTransportLoadForUfc(int generation) {
+            if (localLoadGenerationForUfc != generation) return;
+            CancelLocalTransportLoadForUfc(generation);
+            videoPlayer.Stop();
+            nativeLoadPresentForUfc = false;
+        }
+
+        bool IgnoreLocalTransportCallbackForUfc() => localLoadPendingForUfc &&
+            (!localLoadIssuedForUfc || issuedLoadGenerationForUfc != localLoadGenerationForUfc || !videoPlayer.IsReady);
+
+        // Explicit opt-in capture after the caller has observed native settling.
+        // Stock's playing-only blit loop cannot refresh an already paused seek frame.
+        public bool RefreshLocalTransportPictureForUfc() {
+            if (!isActive || !IsReady) return false;
+            var current = ReadRendererTexture();
+            if (!Utilities.IsValid(current) || current.width < 16 || current.height < 16) return false;
+            texture = current;
+            hasTexture = true;
+            if (videoPlayer.IsPlaying) pictureStartedForUfc = true;
+            isWaitingForTexture = false;
+            if (!isTexturePollScheduled) {
+                isTexturePollScheduled = true;
+                SendCustomEventDelayedSeconds(nameof(_GetTexture), 0.5F);
+            }
+            if (core.enableMipmap || (isAvPro && useFlickerWorkaround && Utilities.IsValid(blitMaterial))) {
+                if (Utilities.IsValid(bufferedTexture) &&
+                    (bufferedTexture.width != current.width || bufferedTexture.height != current.height)) {
+                    VRCRenderTexture.ReleaseTemporary(bufferedTexture);
+                    bufferedTexture = null;
+                }
+                if (!Utilities.IsValid(bufferedTexture)) {
+                    var descriptor = new RenderTextureDescriptor(current.width, current.height,
+                        RenderTextureFormat.ARGB64, 0, core.enableMipmap ? -1 : 0, RenderTextureReadWrite.sRGB);
+                    descriptor.msaaSamples = 1;
+                    descriptor.useMipMap = core.enableMipmap;
+                    descriptor.autoGenerateMips = core.enableMipmap;
+                    bufferedTexture = VRCRenderTexture.GetTemporary(descriptor);
+                    bufferedTexture.wrapMode = TextureWrapMode.Clamp;
+                }
+                if (Utilities.IsValid(blitMaterial)) {
+                    blitMaterial.SetTextureOffset(texturePropertyID, Vector2.zero);
+                    blitMaterial.SetTextureScale(texturePropertyID, Vector2.one);
+                    VRCGraphics.Blit(current, bufferedTexture, blitMaterial);
+                } else VRCGraphics.Blit(current, bufferedTexture);
+            }
+            core._OnTextureChanged();
+            return true;
+        }
 
 #if COMPILER_UDONSHARP
         public
@@ -60,6 +173,7 @@ namespace JLChnToZ.VRC.VVMW {
                 isActive = value;
                 if (!isActive) {
                     videoPlayer.Stop();
+                    nativeLoadPresentForUfc = false;
                     isReady = false;
                 }
             }
@@ -187,29 +301,46 @@ namespace JLChnToZ.VRC.VVMW {
         public
 #endif
         void _GetTexture() {
-            if (!isActive || !isWaitingForTexture || !videoPlayer.IsPlaying) {
+            isTexturePollScheduled = false;
+            if (!isActive || (isWaitingForTexture && !videoPlayer.IsPlaying && !(isPaused && isReady))) {
                 isWaitingForTexture = false;
                 ClearTexture();
                 return;
             }
-            if (useSharedMaterial)
-                texture = renderer.sharedMaterial.GetTexture(texturePropertyID);
-            else {
-                if (!Utilities.IsValid(propertyBlock)) propertyBlock = new MaterialPropertyBlock();
-                renderer.GetPropertyBlock(propertyBlock);
-                texture = propertyBlock.GetTexture(texturePropertyID);
-            }
-            if (Utilities.IsValid(texture)) {
+            // Keep polling even if AVPro has destroyed the old texture during a resolution change.
+            if (!isWaitingForTexture && !hasTexture) return;
+            var current = ReadRendererTexture();
+            if (Utilities.IsValid(current) && (isWaitingForTexture || current != texture)) {
+                if (hasTexture)
+                    Debug.Log($"[VVMW] Video texture of {playerName} changed: {current.width}x{current.height}.");
+                texture = current;
                 isWaitingForTexture = false;
+                hasTexture = true;
+                if (Utilities.IsValid(bufferedTexture) &&
+                    (bufferedTexture.width != texture.width || bufferedTexture.height != texture.height)) {
+                    // The running blit loop recreates it at the new size on its next run.
+                    Debug.Log($"[VVMW] Released temporary render texture for {playerName}.");
+                    VRCRenderTexture.ReleaseTemporary(bufferedTexture);
+                    bufferedTexture = null;
+                }
                 BlitBufferScreen();
                 core._OnTextureChanged();
-            } else
-                SendCustomEventDelayedSeconds(nameof(_GetTexture), 0.2F);
+            }
+            isTexturePollScheduled = true;
+            SendCustomEventDelayedSeconds(nameof(_GetTexture), isWaitingForTexture ? 0.2F : 0.5F);
+        }
+
+        Texture ReadRendererTexture() {
+            if (useSharedMaterial)
+                return renderer.sharedMaterial.GetTexture(texturePropertyID);
+            if (!Utilities.IsValid(propertyBlock)) propertyBlock = new MaterialPropertyBlock();
+            renderer.GetPropertyBlock(propertyBlock);
+            return propertyBlock.GetTexture(texturePropertyID);
         }
 
         void BlitBufferScreen() {
             if (!(core.enableMipmap || (isAvPro && useFlickerWorkaround && Utilities.IsValid(blitMaterial))) ||
-                isReblitRunning || !Utilities.IsValid(texture) || !videoPlayer.IsPlaying)
+                isReblitRunning || !Utilities.IsValid(texture) || (!videoPlayer.IsPlaying && !(isPaused && isReady)))
                 return;
             isReblitRunning = true;
             SendCustomEventDelayedFrames(nameof(_BlitBufferScreen), 0, EventTiming.LateUpdate);
@@ -224,7 +355,7 @@ namespace JLChnToZ.VRC.VVMW {
         public
 #endif
         void _BlitBufferScreen() {
-            if (!isActive || !videoPlayer.IsPlaying || !Utilities.IsValid(texture)) {
+            if (!isActive || (!videoPlayer.IsPlaying && !(isPaused && isReady)) || !Utilities.IsValid(texture)) {
                 isReblitRunning = false;
                 return;
             }
@@ -260,7 +391,12 @@ namespace JLChnToZ.VRC.VVMW {
         internal protected
 #endif
         override void LoadUrl(VRCUrl url, bool reload) {
-            if (videoPlayer.IsPlaying) videoPlayer.Stop();
+            localLoadBlockedForUfc = false;
+            bool reuse = !reload && localLoadPendingForUfc && CanReuseLocalTransportForUfc(url);
+            if (videoPlayer.IsPlaying || (localLoadPendingForUfc && nativeLoadPresentForUfc && !reuse)) {
+                videoPlayer.Stop();
+                nativeLoadPresentForUfc = false;
+            }
             if (!isActive) return;
             bool skip = !reload &&
                 !VRCUrl.IsNullOrEmpty(currentUrl) &&
@@ -280,6 +416,26 @@ namespace JLChnToZ.VRC.VVMW {
             }
         }
 
+        // UFC fork seam: identity by default; local transport routing only.
+        // Upstream VizVid1.8.2 by Jeremy Lam (JLChnToZ), MIT; retain package LICENSE.
+#if COMPILER_UDONSHARP
+        public
+#else
+        protected
+#endif
+        virtual VRCUrl ResolveLocalTransportUrlForUfc(VRCUrl canonicalUrl) =>
+            HasLocalTransportUrlForUfc(canonicalUrl) ? localPhysicalUrlForUfc : canonicalUrl;
+
+        void LoadNativeTransportForUfc() {
+            loadedUrl = currentUrl;
+            loadedPhysicalUrlForUfc = ResolveLocalTransportUrlForUfc(currentUrl);
+            issuedLoadGenerationForUfc = localLoadGenerationForUfc;
+            localLoadIssuedForUfc = true;
+            nativeLoadPresentForUfc = true;
+            pictureStartedForUfc = false;
+            videoPlayer.LoadURL(loadedPhysicalUrlForUfc);
+        }
+
         void LoadUrl() {
             isReady = false;
             SetPlaybackSpeed();
@@ -288,10 +444,11 @@ namespace JLChnToZ.VRC.VVMW {
                 if (delay > 0) {
                     isLoadUrlRequested = true;
                     SendCustomEventDelayedSeconds(nameof(_DoLoadUrl), delay);
-                } else {
-                    loadedUrl = currentUrl;
-                    videoPlayer.LoadURL(currentUrl);
-                }
+                } else if (localLoadPendingForUfc) {
+                    // One update after Stop, through the same serial executor as the rate limiter.
+                    isLoadUrlRequested = true;
+                    SendCustomEventDelayedFrames(nameof(_DoLoadUrl), 1);
+                } else LoadNativeTransportForUfc();
             }
         }
 
@@ -300,10 +457,9 @@ namespace JLChnToZ.VRC.VVMW {
 #endif
         void _DoLoadUrl() {
             isLoadUrlRequested = false;
-            if (!isActive || VRCUrl.IsNullOrEmpty(currentUrl))
+            if (!isActive || localLoadBlockedForUfc || VRCUrl.IsNullOrEmpty(currentUrl))
                 return;
-            loadedUrl = currentUrl;
-            videoPlayer.LoadURL(currentUrl);
+            LoadNativeTransportForUfc();
         }
 
 #if COMPILER_UDONSHARP
@@ -336,6 +492,7 @@ namespace JLChnToZ.VRC.VVMW {
         override void Stop() {
             if (!isActive) return;
             videoPlayer.Stop();
+            nativeLoadPresentForUfc = false;
             if (isRealTimeProtocol) {
                 isRealTimeProtocol = false;
                 loadedUrl = currentUrl = VRCUrl.Empty;
@@ -345,11 +502,13 @@ namespace JLChnToZ.VRC.VVMW {
 
         public override void OnVideoError(VideoError videoError) {
             if (!isActive) return;
+            if (localLoadPendingForUfc && (!localLoadIssuedForUfc || issuedLoadGenerationForUfc != localLoadGenerationForUfc)) return;
             isReady = false;
             core.OnVideoError(videoError);
         }
 
         public override void OnVideoReady() {
+            if (IgnoreLocalTransportCallbackForUfc()) return;
             actualPlaybackSpeed = playbackSpeed;
             if (VRCUrl.IsNullOrEmpty(currentUrl) || !currentUrl.Equals(loadedUrl)) return;
             UpdatePrimaryAudioSourcePitch();
@@ -370,14 +529,23 @@ namespace JLChnToZ.VRC.VVMW {
                 }
             }
             core.OnVideoReady();
+            // A first load into a paused room has no Start callback to discover its texture.
+            if (isPaused) WaitForTexture();
         }
 
         public override void OnVideoStart() {
+            if (IgnoreLocalTransportCallbackForUfc()) return;
+            pictureStartedForUfc = true;
             isPaused = false;
             if (isActive) core.OnVideoStart();
+            WaitForTexture();
+        }
+
+        void WaitForTexture() {
             if (!isWaitingForTexture) {
                 isWaitingForTexture = true;
-                _GetTexture();
+                // Reuse a pending poll rather than starting a second delayed-event chain.
+                if (!isTexturePollScheduled) _GetTexture();
             }
         }
 
@@ -386,6 +554,7 @@ namespace JLChnToZ.VRC.VVMW {
 #endif
 
         public override void OnVideoPlay() {
+            if (IgnoreLocalTransportCallbackForUfc()) return;
             isPaused = false;
             if (!isActive) return;
             BlitBufferScreen();
@@ -397,12 +566,14 @@ namespace JLChnToZ.VRC.VVMW {
 #endif
 
         public override void OnVideoPause() {
+            if (IgnoreLocalTransportCallbackForUfc()) return;
             isPaused = true;
             if (!isActive) return;
             core.OnVideoPause();
         }
 
         public override void OnVideoEnd() {
+            if (localLoadPendingForUfc) return;
             // Here are quirky behaviors of AVPro video player for firing OnVideoEnd event:
             // 1. If it's real-time protocol,
             //    it doesn't mean the stream is ended,
@@ -420,6 +591,7 @@ namespace JLChnToZ.VRC.VVMW {
         }
 
         public override void OnVideoLoop() {
+            if (localLoadPendingForUfc) return;
             isPaused = false;
             if (!isActive) return;
             core.OnVideoLoop();
@@ -452,7 +624,9 @@ namespace JLChnToZ.VRC.VVMW {
         }
 
         void ClearTexture() {
+            isWaitingForTexture = false;
             texture = null;
+            hasTexture = false;
             if (Utilities.IsValid(bufferedTexture)) {
                 Debug.Log($"[VVMW] Released temporary render texture for {playerName}.");
                 VRCRenderTexture.ReleaseTemporary(bufferedTexture);

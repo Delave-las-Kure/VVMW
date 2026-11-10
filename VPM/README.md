@@ -1,7 +1,22 @@
 # UFC VizVid Stable
 
-Maintained branch: `ufc/cinema-stable`. The optional video mirror work remains
-on the separate `ufc/video-mirrors` branch and is not included in this package.
+Maintained integration branch: **`ufc/cinema-stable`**. Feature work is qualified
+on `ufc/video-mirrors` and then merged here. The GitHub default branch `develop`
+and the literal branch `main` are not UFC's integration/release target.
+
+## Current source versus published release
+
+The accepted optional personal source mirrors and source UI from feature commit
+`0caf9fd826da77f721b04f11fb68c711b1c7c020` are now integrated here. All package
+files match that tested source exactly, including the `1.8.2-cinema.2` candidate
+metadata; VPM/release helpers from the stable branch are retained.
+
+This source merge does not publish a package or change the existing VPM listing.
+The installation instructions below still describe the immutable published
+`1.8.2-ufc.1` release, which does not contain mirrors. Restoring the latest source
+requires the exact integration commit, not that older released archive. A future
+release needs its own version/tag and verified archive; never replace the old
+version's contents.
 
 ## Install with VCC / ALCOM
 

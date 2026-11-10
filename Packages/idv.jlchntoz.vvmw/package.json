@@ -1,9 +1,9 @@
 {
   "name": "idv.jlchntoz.vvmw",
-  "displayName": "VizVid (UFC Stable)",
-  "version": "1.8.2-ufc.1",
+  "displayName": "VizVid (Cinema fork)",
+  "version": "1.8.2-cinema.2",
   "unity": "2019.4",
-  "description": "UFC stable fork of VizVid 1.8.2 with the paused playback clock correction.",
+  "description": "Cinema fork of VizVid 1.8.2 with optional personal source mirrors.",
   "license": "MIT",
   "vrchatVersion": "2022.1.1",
   "documentationUrl": "https://xtlcdn.github.io/VizVid/docs/",

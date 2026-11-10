@@ -27,6 +27,16 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                 }
 #endif
                 var audioControllers = new List<AbstractAudioController>();
+                // Explicitly authored routes must survive repeated preprocessing.
+                // Ordinary controllers still follow the upstream discovery path below.
+                if (core.audioControllers != null)
+                    foreach (var controller in core.audioControllers) {
+                        if (!controller || !controller.preserveOutputRouteForUfc) continue;
+                        if (controller.core != core || !controller.OutputAudioSourceForUfc || audioControllers.Contains(controller))
+                            throw new System.InvalidOperationException("Invalid explicit VizVid output route.");
+                        audioControllers.Add(controller);
+                        UdonSharpEditorUtility.CopyProxyToUdon(controller);
+                    }
                 var audioSources = new HashSet<AudioSource>(core.audioSources);
                 foreach (var audioSource in core.audioSources) {
                     if (audioSource == null || !audioSource.TryGetComponent(out AbstractAudioController controller))
