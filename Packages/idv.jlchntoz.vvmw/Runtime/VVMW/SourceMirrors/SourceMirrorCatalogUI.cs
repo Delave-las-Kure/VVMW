@@ -125,6 +125,14 @@ namespace JLChnToZ.VRC.VVMW {
             tag = current ? catalog.CompatibilityTag : "same-edit-start-speed";
             ids = new[] { "primary", "mirror1", "mirror2" };
             originalUrls = new VRCUrl[3];
+            // VRCUrlInputField initializes on first activation in the Udon VM.
+            // Activating a previously hidden row after SetUrl loses that value.
+            // Finish its native lifecycle before filling the captured draft;
+            // _Refresh restores the actual editor/view-only presentation below.
+            if (Utilities.IsValid(scrollRoot)) scrollRoot.SetActive(true);
+            if (Utilities.IsValid(fieldsRoot)) fieldsRoot.SetActive(true);
+            if (mirrorRows != null) foreach (var row in mirrorRows)
+                if (Utilities.IsValid(row)) row.SetActive(true);
             for (int i = 0; i < 3; i++) {
                 bool present = current && i < catalog.SourceCount;
                 if (present) { ids[i] = catalog.GetSourceId(i); originalUrls[i] = catalog.GetSourceUrl(i); }
