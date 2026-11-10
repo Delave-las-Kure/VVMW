@@ -196,7 +196,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
         public static void Validate(SourceMirrorUI view) {
             Need(view && view.mirrors && view.panel && view.entryButton && view.autoButton && view.retryButton && view.enableButton,
                 "Source UI references are incomplete.");
-            var canvas = view.GetComponentInParent<Canvas>();
+            var canvas = view.GetComponentInParent<Canvas>(true);
             Need(canvas && canvas.renderMode == RenderMode.WorldSpace && canvas.gameObject.layer != 5,
                 "Personal sources need a world-space Canvas outside reserved UI layer5.");
             Need(view.sourceButtons != null && view.sourceButtons.Length == 3 && view.sourceButtons.All(x => x) &&
