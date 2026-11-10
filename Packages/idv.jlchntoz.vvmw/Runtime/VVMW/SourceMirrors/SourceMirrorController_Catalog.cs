@@ -72,6 +72,53 @@ namespace JLChnToZ.VRC.VVMW {
         public bool CanChooseSourceForUI => !NetworkCalling.InNetworkCall && enabled && gameObject.activeInHierarchy &&
             !mirrorsOff && !disabling && MatchesCatalogSourceContext() && Configured();
 
+        // A displayed choice may explicitly opt in from Off. Merely opening or
+        // refreshing the view never changes this controller or adopts the primary.
+        public bool CanOfferSourceForUI {
+            get {
+#if UNITY_ANDROID || UNITY_IOS
+                return false;
+#else
+                return !NetworkCalling.InNetworkCall && gameObject.activeInHierarchy && !disabling &&
+                    Utilities.IsValid(core) && core.SharedStateForUfc != 0 &&
+                    Utilities.IsValid(sourceCatalog) && sourceCatalog.IsCurrent && sourceCatalog.SourceCount > 0 &&
+                    sourceCatalog.ContextBackend == CatalogBackend() &&
+                    (!Utilities.IsValid(sourceCatalog.authority) || sourceCatalog.authority.core == core) &&
+                    !VRCUrl.IsNullOrEmpty(sourceCatalog.ContextCanonical) &&
+                    sourceCatalog.ContextCanonical.Equals(core.Url) && PresentationConfigured();
+#endif
+            }
+        }
+
+        public bool ChooseSourceFromUI(string sourceId, bool automatic, string expectedCatalogVersion, string expectedPlaybackId) {
+            if (!CanOfferSourceForUI) {
+                selectionResult = NetworkCalling.InNetworkCall ? SourceMirrorCatalog.LocalOnly : SourceMirrorCatalog.Disabled;
+                return false;
+            }
+            string id = automatic ? sourceCatalog.GetSourceId(0) : sourceId;
+            // Validate the displayed CAS before opting in. Stale pointer-down,
+            // unknown IDs and a different film must leave Off untouched.
+            if (VRCUrl.IsNullOrEmpty(sourceCatalog.ResolveSource(id, expectedCatalogVersion, expectedPlaybackId))) {
+                selectionResult = sourceCatalog.Result; return false;
+            }
+            if (!sourceCatalog.RegisterLocalSelectionObserver(this)) {
+                selectionResult = SourceMirrorCatalog.NotContextReady; return false;
+            }
+            if (!enabled || mirrorsOff) {
+                // OnEnable may register metadata, but must not Attach/Adopt a
+                // primary load before the one choice below. Restore watching only
+                // after enabling; the existing selection/Auto path owns all media.
+                observeCoreLoads = false;
+                if (!enabled) skipUiEnableAdoption = true;
+                skipUiStartAdoption = true;
+                canonical = sourceCatalog.ContextCanonical;
+                mirrorsOff = false; disabling = false; enabled = true;
+                observeCoreLoads = true;
+            }
+            return automatic ? UseAuto(expectedCatalogVersion, expectedPlaybackId) :
+                SelectSource(id, expectedCatalogVersion, expectedPlaybackId);
+        }
+
         bool MatchesCatalogSourceContext() {
 #if UNITY_ANDROID || UNITY_IOS
             return false;

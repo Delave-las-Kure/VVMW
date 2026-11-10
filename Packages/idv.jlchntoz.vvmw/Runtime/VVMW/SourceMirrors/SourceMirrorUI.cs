@@ -18,6 +18,7 @@ namespace JLChnToZ.VRC.VVMW {
         [Tooltip("Fallback language when no LanguageManager is configured: 0 English, 1 Russian, 2 Japanese.")]
         public int fallbackLanguage;
         public GameObject panel;
+        public GameObject actionsRoot;
         public Button entryButton, autoButton, retryButton, enableButton;
         public Button[] sourceButtons;
         public GameObject autoSelected;
@@ -102,10 +103,10 @@ namespace JLChnToZ.VRC.VVMW {
         public void _Auto() {
             if (!PanelAction() || !bound || !canChoose || !HasController()) return;
             // A selected mode is not an implicit Retry or a refreshed budget.
-            if (mirrors.AutoEnabled) { pressedAction = -1; _Refresh(); return; }
+            if (mirrors.AutoEnabled && mirrors.enabled && !mirrors.mirrorsOff) { pressedAction = -1; _Refresh(); return; }
             string version = ClickVersion(3), playback = ClickPlayback(3);
             pressedAction = -1;
-            Complete(mirrors.UseAuto(version, playback));
+            Complete(mirrors.ChooseSourceFromUI("", true, version, playback));
         }
         public void _Source0() => Select(0);
         public void _Source1() => Select(1);
@@ -115,7 +116,7 @@ namespace JLChnToZ.VRC.VVMW {
             string id = pressedAction == index ? pressedId : shownIds[index];
             string version = ClickVersion(index), playback = ClickPlayback(index);
             pressedAction = -1;
-            if (!mirrors.AutoEnabled && mirrors.SelectedSourceId == id &&
+            if (mirrors.enabled && !mirrors.mirrorsOff && !mirrors.AutoEnabled && mirrors.SelectedSourceId == id &&
                 mirrors.SelectedPlaybackId == playback && mirrors.SelectedCatalogVersion == version &&
                 HasCurrentCatalog() && mirrors.sourceCatalog.Version == version &&
                 mirrors.sourceCatalog.ContextPlaybackId == playback &&
@@ -127,7 +128,7 @@ namespace JLChnToZ.VRC.VVMW {
             // Off/On retains the old selection receipt but hands playback to
             // primary. That old ID alone must not suppress an explicit reapply.
             // Do not rebind an index to a newer catalog before validating this click.
-            Complete(mirrors.SelectSource(id, version, playback));
+            Complete(mirrors.ChooseSourceFromUI(id, false, version, playback));
         }
         public void _Retry() {
             if (!PanelAction() || !bound || !canChoose || !HasController() || !CanRetry()) return;
@@ -177,7 +178,7 @@ namespace JLChnToZ.VRC.VVMW {
             bool off = controller && (!mirrors.enabled || !mirrors.gameObject.activeInHierarchy || mirrors.mirrorsOff);
             bool turningOff = controller && mirrors.IsTurningOff;
             bool auto = controller && mirrors.AutoEnabled;
-            canChoose = controller && current && mirrors.CanChooseSourceForUI;
+            canChoose = controller && current && mirrors.CanOfferSourceForUI;
 #if UNITY_ANDROID || UNITY_IOS
             canChoose = false;
 #endif
@@ -197,8 +198,8 @@ namespace JLChnToZ.VRC.VVMW {
                 for (int i = 0; i < count; i++)
                     if (!VRCUrl.IsNullOrEmpty(loaded) && loaded.Equals(mirrors.sourceCatalog.GetSourceUrl(i))) actualId = shownIds[i];
             }
-            viewState = !controller || !mirrors.HasPresentationWiring ? NotConfigured : off ? Off :
-                mirrors.core.SharedStateForUfc == 0 ? Idle : turningOff ? TurningOff : !current ? NoCatalog :
+            viewState = !controller || !mirrors.HasPresentationWiring ? NotConfigured :
+                mirrors.core.SharedStateForUfc == 0 ? Idle : turningOff ? TurningOff : !current ? NoCatalog : off ? Off :
                 auto && mirrors.AutoState == SourceMirrorController.AutoExhausted ? Exhausted :
                 auto && mirrors.AutoState == SourceMirrorController.AutoBlocked ? Blocked :
                 mirrors.pending ? Loading : mirrors.failed ? Error : !string.IsNullOrEmpty(actualId) ? Ready :
@@ -211,21 +212,36 @@ namespace JLChnToZ.VRC.VVMW {
             Put(autoText, Tr("Auto")); Put(retryText, Tr("Retry"));
             Put(enableText, Tr(off || turningOff ? "Enable" : "Disable"));
             Put(modeText, Tr("Mode") + ": " + Tr(off || turningOff ? "OffMode" : auto ? "Auto" : "Manual"));
-            Put(actualText, Tr("Actual") + ": " + SourceLabel(actualId));
+            string intendedId = controller && mirrors.SelectedPlaybackId == shownPlayback ? mirrors.SelectedSourceId : "";
+            string target = SourceLabel(intendedId);
+            bool hasTarget = target != "—";
+            Put(actualText, Tr(string.IsNullOrEmpty(actualId) && hasTarget ? "Target" : "Actual") + ": " +
+                SourceLabel(string.IsNullOrEmpty(actualId) ? intendedId : actualId));
+            if (Utilities.IsValid(actualText)) actualText.gameObject.SetActive(current &&
+                (hasTarget || !string.IsNullOrEmpty(actualId)));
+            if (Utilities.IsValid(modeText)) modeText.gameObject.SetActive(current && !off && !turningOff && viewState != Idle);
             string stateKey = viewState == NotConfigured ? "Unavailable" : viewState == Unsupported ? "Unsupported" :
                 viewState == Off ? "OffStatus" : viewState == Idle ? "Idle" : viewState == NoCatalog ? "NoCatalog" :
                 viewState == TurningOff ? (mirrors.failed ? "ReturnError" : "Returning") : viewState == Exhausted ? "Exhausted" :
                 viewState == Blocked ? "Blocked" : viewState == Error ? "Error" : viewState == NotListed ? "NotListed" : viewState == Loading ? "Loading" :
                 mirrors.core.SharedStateForUfc == 3 ? "Paused" : count == 1 ? "Single" : "Ready";
-            Put(statusText, Tr(stateKey)); Put(feedbackText, string.IsNullOrEmpty(feedback) ? "" : Tr(feedback));
+            string status = (viewState == Loading || viewState == Error) && hasTarget ?
+                Tr(viewState == Loading ? "LoadingTarget" : "ErrorTarget").Replace("{0}", target) : Tr(stateKey);
+            Put(statusText, status); Put(feedbackText, string.IsNullOrEmpty(feedback) ? "" : Tr(feedback));
             if (Utilities.IsValid(feedbackText)) feedbackText.gameObject.SetActive(!string.IsNullOrEmpty(feedback));
             if (Utilities.IsValid(autoButton)) autoButton.interactable = canChoose;
+            if (Utilities.IsValid(autoButton)) autoButton.gameObject.SetActive(current && count > 1 && viewState != Idle);
             if (Utilities.IsValid(autoSelected)) autoSelected.SetActive(auto && !off && !turningOff);
             if (Utilities.IsValid(retryButton)) retryButton.interactable = canChoose && CanRetry();
+            if (Utilities.IsValid(retryButton)) retryButton.gameObject.SetActive(canChoose && !off && CanRetry());
             if (Utilities.IsValid(enableButton)) enableButton.interactable = controller && mirrors.gameObject.activeInHierarchy && mirrors.HasPresentationWiring;
+            if (Utilities.IsValid(enableButton)) enableButton.gameObject.SetActive(!(off && canChoose));
+            if (Utilities.IsValid(actionsRoot)) actionsRoot.SetActive(
+                (Utilities.IsValid(enableButton) && enableButton.gameObject.activeSelf) ||
+                (Utilities.IsValid(retryButton) && retryButton.gameObject.activeSelf));
             int rows = sourceButtons == null ? 0 : sourceButtons.Length;
             for (int i = 0; i < rows; i++) {
-                bool visible = i < count;
+                bool visible = i < count && viewState != Idle;
                 if (Utilities.IsValid(sourceButtons[i])) {
                     sourceButtons[i].gameObject.SetActive(visible);
                     sourceButtons[i].interactable = canChoose;
@@ -262,6 +278,7 @@ namespace JLChnToZ.VRC.VVMW {
                 case "OffMode": return L("Mirrors off", "Зеркала выключены", "ミラー無効");
                 case "Mode": return L("Selection", "Выбор", "選択方法");
                 case "Actual": return L("Playing from", "Сейчас", "再生中のソース");
+                case "Target": return L("Selected source", "Выбран источник", "選択中のソース");
                 case "Primary": return L("Primary", "Основной", "メイン");
                 case "Source": return L("Source", "Источник", "ソース");
                 case "Retry": return L("Retry loading", "Повторить загрузку", "再読み込み");
@@ -269,10 +286,12 @@ namespace JLChnToZ.VRC.VVMW {
                 case "Disable": return L("Disable mirrors", "Отключить зеркала", "ミラーを無効化");
                 case "Unavailable": return L("Sources are unavailable", "Источники недоступны", "ソースを利用できません");
                 case "Unsupported": return L("Source selection is unavailable on this platform", "Выбор источника недоступен на этой платформе", "この環境ではソースを選択できません");
-                case "OffStatus": return L("Mirrors are disabled", "Зеркала отключены", "ミラーは無効です");
-                case "Idle": return L("No video is playing", "Видео не запущено", "動画が再生されていません");
+                case "OffStatus": return L("Choose a source or Auto to enable mirrors only for you.", "Выберите источник или Авто — зеркала включатся только у вас.", "ソースか自動を選ぶと、自分だけのミラーが有効になります。");
+                case "Idle": return L("Choose a video in the player first.", "Сначала выберите видео в плеере.", "先にプレーヤーで動画を選んでください。");
                 case "NoCatalog": return L("No source list for this video", "Для этого видео нет списка источников", "この動画のソース一覧はありません");
                 case "Loading": return L("Loading and synchronizing…", "Загрузка и синхронизация…", "読み込み・同期中…");
+                case "LoadingTarget": return L("Switching to {0}…", "Переключаем на {0}…", "{0}に切り替え中…");
+                case "ErrorTarget": return L("{0} could not load. Retry or choose another source.", "{0} не загрузился. Повторите или выберите другой источник.", "{0}を読み込めませんでした。再試行するか別のソースを選んでください。");
                 case "Ready": return L("Ready", "Готово", "準備完了");
                 case "Paused": return L("Paused", "На паузе", "一時停止中");
                 case "Single": return L("No additional sources", "Дополнительных источников нет", "他のソースはありません");

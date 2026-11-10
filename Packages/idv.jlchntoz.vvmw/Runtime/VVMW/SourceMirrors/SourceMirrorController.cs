@@ -35,6 +35,7 @@ namespace JLChnToZ.VRC.VVMW {
         public bool IsHoldingPresentation => held;
         public bool IsTurningOff => disabling;
         VRCUrl lastAcceptedPhysical;
+        bool skipUiEnableAdoption, skipUiStartAdoption;
         public VRCUrl LastAcceptedPhysicalUrl => lastAcceptedPhysical;
 
         public bool CanDetach => mirrorsOff && !held && !pending &&
@@ -73,11 +74,17 @@ namespace JLChnToZ.VRC.VVMW {
         }
         bool SameFilm() => !VRCUrl.IsNullOrEmpty(core.Url) && core.Url.Equals(canonical);
 
-        void Start() { RegisterCatalogObserver(); if (observeCoreLoads) Attach(); }
+        void Start() {
+            RegisterCatalogObserver();
+            if (observeCoreLoads && !skipUiStartAdoption) Attach();
+            skipUiStartAdoption = false;
+        }
         void OnEnable() {
+            bool skipAdoption = skipUiEnableAdoption;
+            skipUiEnableAdoption = false;
             RegisterCatalogObserver();
             if (pending) Queue();
-            if (observeCoreLoads) Attach();
+            if (observeCoreLoads && !skipAdoption) Attach();
         }
         bool Register() => core.RegisterLocalTransportPresenterForUfc(this,canonical,observeCoreLoads);
         void Attach() {
@@ -237,6 +244,7 @@ namespace JLChnToZ.VRC.VVMW {
             Queue();
         }
         void OnDisable() {
+            skipUiEnableAdoption = skipUiStartAdoption = false;
             StopAuto();
             // Direct removal during an in-flight operation is deliberately fail-closed.
             // Use _TurnOff and wait for CanDetach before disabling/removing the composition.

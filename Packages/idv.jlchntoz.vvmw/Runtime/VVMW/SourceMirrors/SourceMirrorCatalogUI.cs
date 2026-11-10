@@ -20,6 +20,12 @@ namespace JLChnToZ.VRC.VVMW {
         public int fallbackLanguage;
         public GameObject panel;
         public Button entryButton, applyButton, reloadButton;
+        public Button addMirrorButton;
+        public Button[] removeMirrorButtons;
+        public GameObject fieldsRoot, readOnlyRoot, compatibilityRow, scrollRoot;
+        public GameObject[] mirrorRows;
+        public ScrollRect fieldsScroll;
+        public Graphic addMirrorText, readOnlyText;
         public VRCUrlInputField[] mirrorInputs;
         public InputField[] nameInputs;
         public Toggle compatibilityToggle;
@@ -50,13 +56,30 @@ namespace JLChnToZ.VRC.VVMW {
             }
         }
 
-        bool bound, tickQueued;
+        bool bound, tickQueued, discardArmed;
         int role, language;
         VRCUrl primary;
         string playback = "", version = "", film = "", tag = "", request = "", feedback = "";
         string[] ids = new string[3];
         string[] originalLabels = new string[3];
         VRCUrl[] originalUrls = new VRCUrl[3];
+        string[] submittedLabels = new string[0];
+        VRCUrl[] submittedMirrors = new VRCUrl[0];
+        bool[] expandedMirrors = new bool[2];
+        public bool RequiresCompatibilityConfirmation {
+            get {
+                if (!bound || !Fields()) return false;
+                for (int i = 0; i < 2; i++) {
+                    var url = mirrorInputs[i].GetUrl();
+                    if (VRCUrl.IsNullOrEmpty(url)) continue;
+                    bool known = false;
+                    for (int j = 0; j < originalUrls.Length; j++)
+                        if (!VRCUrl.IsNullOrEmpty(originalUrls[j]) && url.Equals(originalUrls[j])) known = true;
+                    if (!known) return true;
+                }
+                return false;
+            }
+        }
         bool LocalAction() => !NetworkCalling.InNetworkCall && enabled && gameObject.activeInHierarchy;
         bool Graph() => Utilities.IsValid(authority) && authority.enabled && authority.gameObject.activeInHierarchy &&
             Utilities.IsValid(authority.core) && Utilities.IsValid(authority.catalog) && authority.catalog.enabled &&
@@ -80,16 +103,26 @@ namespace JLChnToZ.VRC.VVMW {
             bool wasOpen = IsOpen; panel.SetActive(true);
             // Closing never cancels a submitted publication. Reopen keeps its
             // draft/status until the existing authority finishes the request.
-            if (!wasOpen && !(Graph() && authority.PublicationPending && authority.PendingRequestId == request)) ReadDraft();
+            if (!wasOpen && !(Graph() && authority.PublicationPending && authority.PendingRequestId == request) &&
+                (!bound || (!HasLocalEdits && string.IsNullOrEmpty(feedback) && string.IsNullOrEmpty(request)))) ReadDraft();
             _Refresh(); Queue();
         }
-        public void _Close() { if (LocalAction() && Utilities.IsValid(panel)) panel.SetActive(false); }
+        public void _Close() {
+            if (!LocalAction() || !Utilities.IsValid(panel)) return;
+            panel.SetActive(false); discardArmed = false;
+            if (feedback == "DiscardFirst") feedback = "";
+        }
         public void _Reload() {
             if (!LocalAction() || !IsOpen || (Graph() && authority.PublicationPending)) return;
+            if (HasLocalEdits && !discardArmed) {
+                discardArmed = true; feedback = "DiscardFirst"; _Refresh(); return;
+            }
             ReadDraft(); _Refresh();
         }
         void ReadDraft() {
-            bound = false; feedback = request = "";
+            bound = false; feedback = request = ""; discardArmed = false;
+            submittedLabels = new string[0]; submittedMirrors = new VRCUrl[0];
+            expandedMirrors = new bool[2];
             if (Fields()) {
                 foreach (var name in nameInputs) name.text = "";
                 foreach (var input in mirrorInputs) input.SetUrl(VRCUrl.Empty);
@@ -111,6 +144,8 @@ namespace JLChnToZ.VRC.VVMW {
                 originalLabels[i] = nameInputs[i].text;
                 if (i > 0) mirrorInputs[i - 1].SetUrl(present ? catalog.GetSourceUrl(i) : VRCUrl.Empty);
             }
+            for (int i = 0; i < 2; i++) expandedMirrors[i] = !VRCUrl.IsNullOrEmpty(mirrorInputs[i].GetUrl());
+            if (Utilities.IsValid(fieldsScroll)) fieldsScroll.verticalNormalizedPosition = 1;
             // A removed source may already use one of the default slot IDs.
             if (ids[1] == ids[0]) ids[1] = Guid.NewGuid().ToString("N");
             if (ids[2] == ids[0] || ids[2] == ids[1]) ids[2] = Guid.NewGuid().ToString("N");
@@ -120,20 +155,24 @@ namespace JLChnToZ.VRC.VVMW {
             if (!LocalAction() || !IsOpen || !Fields()) return;
             if (!CanEdit) { feedback = ""; _Refresh(); return; }
             if (authority.PublicationPending) { _Refresh(); return; }
-            if (!compatibilityToggle.isOn) { feedback = "ConfirmFirst"; _Refresh(); return; }
+            string invalid = ValidateDraftUrls();
+            if (!string.IsNullOrEmpty(invalid)) { feedback = invalid; _Refresh(); return; }
+            if (RequiresCompatibilityConfirmation && !compatibilityToggle.isOn) { feedback = "ConfirmFirst"; _Refresh(); return; }
             if (!authority.IsReadyForPublication || VRCUrl.IsNullOrEmpty(primary)) { feedback = "Unavailable"; _Refresh(); return; }
             var first = mirrorInputs[0].GetUrl(); var second = mirrorInputs[1].GetUrl();
             bool hasFirst = !VRCUrl.IsNullOrEmpty(first), hasSecond = !VRCUrl.IsNullOrEmpty(second);
             int count = 1 + (hasFirst ? 1 : 0) + (hasSecond ? 1 : 0);
             var urls = new VRCUrl[count]; var sourceIds = new string[count]; var labels = new string[count];
-            urls[0] = primary; sourceIds[0] = ids[0]; labels[0] = nameInputs[0].text;
+            urls[0] = primary; sourceIds[0] = ids[0]; labels[0] = SourceName(0, primary);
             int at = 1;
             for (int i = 1; i < 3; i++) {
                 if ((i == 1 && !hasFirst) || (i == 2 && !hasSecond)) continue;
                 var url = i == 1 ? first : second;
-                urls[at] = url; sourceIds[at] = SourceId(url); labels[at] = nameInputs[i].text; at++;
+                urls[at] = url; sourceIds[at] = SourceId(url); labels[at] = SourceName(i, url); at++;
             }
-            request = Guid.NewGuid().ToString("N"); feedback = "";
+            submittedLabels = new[] { nameInputs[0].text, nameInputs[1].text, nameInputs[2].text };
+            submittedMirrors = new[] { first, second };
+            request = Guid.NewGuid().ToString("N"); feedback = ""; discardArmed = false;
             bool accepted = authority.RequestPublishCurrentCatalog(role, version, playback, request,
                 urls, sourceIds, labels, new[] { film, tag });
             compatibilityToggle.isOn = false;
@@ -144,6 +183,58 @@ namespace JLChnToZ.VRC.VVMW {
             for (int i = 0; i < originalUrls.Length; i++)
                 if (!VRCUrl.IsNullOrEmpty(originalUrls[i]) && originalUrls[i].Equals(url)) return ids[i];
             return Guid.NewGuid().ToString("N");
+        }
+        public void _AddMirror() {
+            if (!LocalAction() || !IsOpen || !CanEdit || authority.PublicationPending || !Fields()) return;
+            for (int i = 0; i < 2; i++) if (!expandedMirrors[i] && VRCUrl.IsNullOrEmpty(mirrorInputs[i].GetUrl())) {
+                expandedMirrors[i] = true; _Refresh(); return;
+            }
+        }
+        public void _RemoveMirror0() => RemoveMirror(0);
+        public void _RemoveMirror1() => RemoveMirror(1);
+        void RemoveMirror(int index) {
+            if (!LocalAction() || !IsOpen || !CanEdit || authority.PublicationPending || !Fields()) return;
+            mirrorInputs[index].SetUrl(VRCUrl.Empty); expandedMirrors[index] = false;
+            compatibilityToggle.isOn = false; discardArmed = false; _Refresh();
+        }
+        string ValidateDraftUrls() {
+            for (int i = 0; i < 2; i++) {
+                var url = mirrorInputs[i].GetUrl();
+                if (VRCUrl.IsNullOrEmpty(url)) continue;
+                string value = url.Get();
+                if (value != value.Trim() || value.IndexOf("://") < 1 || value.IndexOf('\n') >= 0 || value.IndexOf('\r') >= 0)
+                    return i == 0 ? "Invalid1" : "Invalid2";
+                if (url.Equals(primary) || (i == 1 && !VRCUrl.IsNullOrEmpty(mirrorInputs[0].GetUrl()) && url.Equals(mirrorInputs[0].GetUrl())))
+                    return i == 0 ? "Duplicate1" : "Duplicate2";
+            }
+            return "";
+        }
+        string Host(VRCUrl url) {
+            if (VRCUrl.IsNullOrEmpty(url)) return "—";
+            string value = url.Get(); int begin = value.IndexOf("://");
+            if (begin < 0) return value;
+            value = value.Substring(begin + 3);
+            int end = value.IndexOf('/'); if (end >= 0) value = value.Substring(0, end);
+            int credentials = value.LastIndexOf('@');
+            return credentials >= 0 ? value.Substring(credentials + 1) : value;
+        }
+        string SourceName(int index, VRCUrl url) => string.IsNullOrEmpty(nameInputs[index].text.Trim()) ?
+            (index == 0 ? Tr("Primary") : Host(url)) : nameInputs[index].text;
+        string ReadOnlySummary() {
+            string result = SourceName(0, primary) + " · " + Host(primary);
+            for (int i = 0; i < 2; i++) if (!VRCUrl.IsNullOrEmpty(mirrorInputs[i].GetUrl()))
+                result += "\n\n" + SourceName(i + 1, mirrorInputs[i].GetUrl()) + " · " + Host(mirrorInputs[i].GetUrl());
+            return result;
+        }
+        bool SubmittedFieldsUnchanged() {
+            if (!Fields() || submittedLabels.Length != 3 || submittedMirrors.Length != 2) return false;
+            for (int i = 0; i < 3; i++) if (nameInputs[i].text != submittedLabels[i]) return false;
+            for (int i = 0; i < 2; i++) {
+                var url = mirrorInputs[i].GetUrl(); var sent = submittedMirrors[i];
+                if (VRCUrl.IsNullOrEmpty(url) ? !VRCUrl.IsNullOrEmpty(sent) :
+                    VRCUrl.IsNullOrEmpty(sent) || !url.Equals(sent)) return false;
+            }
+            return true;
         }
         void Queue() {
             if (tickQueued || !LocalAction() || !IsOpen) return;
@@ -165,6 +256,24 @@ namespace JLChnToZ.VRC.VVMW {
         }
         public void _Refresh() {
             if (!LocalAction() || !IsOpen) return;
+            // An empty idle view has no draft/CAS capability to preserve. Bind
+            // the first arriving movie without requiring a close/reopen.
+            if (!bound && Graph() && Fields() && authority.core.HasSharedPlaybackContextForUfc &&
+                !authority.PublicationPending) ReadDraft();
+            // Only this unchanged submission's exact accepted snapshot may advance
+            // the editor base. A foreign snapshot, local commit or role change cannot.
+            if (bound && Graph() && !authority.PublicationPending &&
+                !string.IsNullOrEmpty(request) && authority.PendingRequestId == request &&
+                authority.PublicationStatus == SourceMirrorCatalogAuthority.Confirmed &&
+                authority.PendingCommittedVersion == authority.catalog.Version &&
+                authority.catalog.IsCurrent && authority.catalog.ContextPlaybackId == playback &&
+                authority.core.HasSharedPlaybackContextForUfc && authority.core.SharedPlaybackIdForUfc == playback &&
+                authority.policy.GetRoleRevision() == role && SubmittedFieldsUnchanged()) {
+                float position = Utilities.IsValid(fieldsScroll) ? fieldsScroll.verticalNormalizedPosition : 1;
+                ReadDraft(); feedback = "Confirmed";
+                if (Utilities.IsValid(fieldsScroll)) fieldsScroll.verticalNormalizedPosition = position;
+            }
+            if (feedback == "Confirmed" && HasLocalEdits) feedback = "";
             // A clean read-only view follows the accepted list. An editor's
             // fixed draft, local changes and outstanding/error receipts do not.
             if (Graph() && Fields() && !Authorized() && !authority.PublicationPending &&
@@ -188,18 +297,44 @@ namespace JLChnToZ.VRC.VVMW {
                 pending ? "Waiting" : !string.IsNullOrEmpty(feedback) ? feedback :
                 !authority.IsReadyForPublication ? "Unavailable" : "Draft";
             Put(titleText, Tr("Title")); Put(scopeText, Tr("Scope")); Put(confirmationText, Tr("Confirm"));
-            Put(primaryText, Tr("PrimaryUrl") + ":\n" + (bound && !VRCUrl.IsNullOrEmpty(primary) ? primary.Get() : "—"));
-            Put(applyText, Tr("Apply")); Put(reloadText, Tr("Reload")); Put(closeText, Tr("Close"));
+            Put(primaryText, Tr(IsDraftStale ? "DraftPrimaryUrl" : "PrimaryUrl") + ":\n" + (bound && !VRCUrl.IsNullOrEmpty(primary) ? primary.Get() : "—"));
+            Put(applyText, Tr("Apply")); Put(reloadText, Tr(discardArmed ? "Discard" : "Reload")); Put(closeText, Tr("Close"));
             Put(statusText, Tr(status));
-            if (nameCaptions != null) for (int i = 0; i < nameCaptions.Length; i++) Put(nameCaptions[i], Tr(i == 0 ? "PrimaryName" : i == 1 ? "Mirror1" : "Mirror2"));
+            bool body = bound && graph && (authority.core.HasSharedPlaybackContextForUfc || HasLocalEdits);
+            bool showFields = body && (Authorized() || HasLocalEdits);
+            if (Utilities.IsValid(scrollRoot)) scrollRoot.SetActive(body);
+            if (Utilities.IsValid(fieldsRoot)) fieldsRoot.SetActive(showFields);
+            if (Utilities.IsValid(readOnlyRoot)) readOnlyRoot.SetActive(body && !showFields);
+            Put(readOnlyText, body ? ReadOnlySummary() : "");
+            if (Utilities.IsValid(compatibilityRow)) compatibilityRow.SetActive(editable && RequiresCompatibilityConfirmation);
+            bool availableSlot = false;
+            for (int i = 0; i < 2; i++) {
+                bool visible = expandedMirrors[i] || (Fields() && !VRCUrl.IsNullOrEmpty(mirrorInputs[i].GetUrl()));
+                if (!visible) availableSlot = true;
+                if (mirrorRows != null && i < mirrorRows.Length && Utilities.IsValid(mirrorRows[i])) mirrorRows[i].SetActive(visible);
+                if (removeMirrorButtons != null && i < removeMirrorButtons.Length && Utilities.IsValid(removeMirrorButtons[i]))
+                    removeMirrorButtons[i].interactable = editable && !pending;
+            }
+            if (Utilities.IsValid(addMirrorButton)) {
+                addMirrorButton.gameObject.SetActive(editable);
+                addMirrorButton.interactable = !pending && availableSlot;
+            }
+            Put(addMirrorText, Tr(availableSlot ? "AddMirror" : "MirrorLimit"));
+            if (nameCaptions != null) for (int i = 0; i < nameCaptions.Length; i++) Put(nameCaptions[i], (i == 0 ? Tr("PrimaryName") : Tr(i == 1 ? "Mirror1" : "Mirror2") + " · " + Tr("Name")));
             if (urlCaptions != null) for (int i = 0; i < urlCaptions.Length; i++) Put(urlCaptions[i], Tr("MirrorUrl"));
             if (Fields()) {
                 for (int i = 0; i < 3; i++) nameInputs[i].interactable = editable && !pending;
                 for (int i = 0; i < 2; i++) mirrorInputs[i].interactable = editable && !pending;
-                compatibilityToggle.interactable = editable && !pending;
+                compatibilityToggle.interactable = editable && !pending && RequiresCompatibilityConfirmation;
             }
-            if (Utilities.IsValid(applyButton)) applyButton.interactable = editable && !pending && authority.IsReadyForPublication;
-            if (Utilities.IsValid(reloadButton)) reloadButton.interactable = graph && !pending;
+            if (Utilities.IsValid(applyButton)) {
+                applyButton.gameObject.SetActive(bound && graph && Authorized());
+                applyButton.interactable = editable && !pending && authority.IsReadyForPublication;
+            }
+            if (Utilities.IsValid(reloadButton)) {
+                reloadButton.gameObject.SetActive(bound && graph && (Authorized() || HasLocalEdits || !string.IsNullOrEmpty(request)));
+                reloadButton.interactable = graph && !pending;
+            }
         }
         void Put(Graphic target, string value) {
             if (!Utilities.IsValid(target)) return;
@@ -210,27 +345,37 @@ namespace JLChnToZ.VRC.VVMW {
         string Tr(string key) {
             switch (key) {
                 case "Title": return L("Shared video sources", "Общие источники видео", "共有動画ソース");
-                case "Scope": return L("For everyone. This does not start or reload the video.", "Для всех. Не запускает и не перезагружает видео.", "全員に適用。動画の開始や再読み込みは行いません。");
+                case "Scope": return L("Available to everyone. Each viewer chooses their own source.", "Список доступен всем. Источник каждый выбирает у себя.", "全員に共有されます。再生ソースは各自で選びます。");
                 case "PrimaryUrl": return L("Current video · primary URL", "Текущий фильм · основной URL", "現在の動画・メインURL");
                 case "PrimaryName": return L("Primary source name", "Название основного источника", "メインソースの名前");
                 case "Primary": return L("Primary", "Основной", "メイン");
                 case "Mirror1": return L("Mirror 1", "Зеркало 1", "ミラー1");
                 case "Mirror2": return L("Mirror 2", "Зеркало 2", "ミラー2");
-                case "MirrorUrl": return L("Full URL · leave empty to omit", "Полный URL · пустое поле исключает зеркало", "完全なURL・空欄は除外");
-                case "Confirm": return L("Same edit, start and playback speed", "Одинаковые монтаж, начало и скорость", "同じ編集・開始位置・再生速度");
-                case "Apply": return L("Apply for everyone", "Применить для всех", "全員に適用");
-                case "Reload": return L("Reload list · discard edits", "Перечитать · сбросить правки", "一覧を再取得・編集を破棄");
+                case "MirrorUrl": return L("Video URL", "Ссылка на видео", "動画URL");
+                case "Confirm": return L("Same film, edit, start and speed", "Тот же фильм, монтаж, начало и скорость", "同じ動画・編集・開始位置・速度です");
+                case "Apply": return L("Save sources", "Сохранить источники", "ソースを保存");
+                case "Reload": return L("Refresh list", "Обновить список", "一覧を更新");
+                case "Discard": return L("Discard changes", "Сбросить правки", "変更を破棄");
+                case "DiscardFirst": return L("Your draft is kept. Press Discard changes to replace it.", "Черновик сохранён. Для сброса нажмите «Сбросить правки».", "下書きは保持されています。「変更を破棄」で再取得します。");
+                case "DraftPrimaryUrl": return L("Draft for this primary URL", "Черновик для основного URL", "下書きのメインURL");
+                case "AddMirror": return L("Add mirror", "Добавить зеркало", "ミラーを追加");
+                case "MirrorLimit": return L("2 mirrors added", "Добавлено 2 зеркала", "ミラーは2件まで");
+                case "Name": return L("name", "название", "名前");
+                case "Invalid1": return L("Mirror 1: enter a full video URL.", "Зеркало 1: укажите полный адрес видео.", "ミラー1：動画の完全なURLを入力してください。");
+                case "Invalid2": return L("Mirror 2: enter a full video URL.", "Зеркало 2: укажите полный адрес видео.", "ミラー2：動画の完全なURLを入力してください。");
+                case "Duplicate1": return L("Mirror 1 repeats the primary URL.", "Зеркало 1 повторяет основной адрес.", "ミラー1はメインURLと重複しています。");
+                case "Duplicate2": return L("Mirror 2 repeats another source URL.", "Зеркало 2 повторяет другой источник.", "ミラー2は別のソースと重複しています。");
                 case "Close": return L("Close", "Закрыть", "閉じる");
-                case "Draft": return L("Edit sources for this video, then confirm and apply.", "Измените источники этого фильма, подтвердите и примените.", "この動画のソースを編集し、確認して適用してください。");
+                case "Draft": return L("Names are optional. Save when the links are ready.", "Названия необязательны. Сохраните готовые ссылки.", "名前は省略できます。URLを確認して保存してください。");
                 case "ViewOnly": return L("Only the current host can edit this list.", "Изменять список может только текущий ведущий.", "編集できるのは現在のホストのみです。");
                 case "NoVideo": return L("Start a video using the normal player controls first.", "Сначала запустите фильм обычными кнопками плеера.", "先に通常の操作で動画を開始してください。");
                 case "Changed": return L("The video, list or host changed. Reload the list before applying.", "Фильм, список или ведущий изменились. Сначала перечитайте список.", "動画・一覧・ホストが変更されました。適用前に一覧を再取得してください。");
                 case "ConfirmFirst": return L("Confirm the same edit, start and speed before applying.", "Перед применением подтвердите одинаковые монтаж, начало и скорость.", "適用前に同じ編集・開始位置・速度であることを確認してください。");
-                case "Waiting": return L("Publishing… waiting for confirmation.", "Публикация… ожидаем подтверждения.", "公開中…確認を待っています。");
-                case "Confirmed": return L("The shared source list is published.", "Общий список источников опубликован.", "共有ソース一覧を公開しました。");
-                case "Unconfirmed": return L("Publication was not confirmed. Reload the list before trying again.", "Публикация не подтверждена. Перечитайте список перед новой попыткой.", "公開を確認できませんでした。再試行前に一覧を再取得してください。");
-                case "Rejected": return L("Could not publish. Check the URLs and reload the list.", "Не удалось применить. Проверьте URL и перечитайте список.", "適用できませんでした。URLを確認して一覧を再取得してください。");
-                case "Unavailable": return L("Publication is unavailable. Wait or reload the list.", "Публикация пока недоступна. Подождите или перечитайте список.", "現在公開できません。しばらく待つか一覧を再取得してください。");
+                case "Waiting": return L("Saving… waiting for confirmation.", "Сохраняем… ждём подтверждения.", "保存中…確認を待っています。");
+                case "Confirmed": return L("Sources updated.", "Источники обновлены.", "ソースを更新しました。");
+                case "Unconfirmed": return L("Save was not confirmed. Your draft is kept; refresh to check the list.", "Сохранение не подтверждено. Черновик сохранён; обновите список для проверки.", "保存を確認できません。下書きは保持されています。一覧を更新してください。");
+                case "Rejected": return L("Could not save. Your draft is kept; check the list and your access.", "Не удалось сохранить. Черновик сохранён; проверьте список и права.", "保存できません。下書きは保持されています。一覧と権限を確認してください。");
+                case "Unavailable": return L("Saving is unavailable. Your draft is kept.", "Сохранение пока недоступно. Черновик сохранён.", "現在保存できません。下書きは保持されています。");
             }
             return key;
         }
