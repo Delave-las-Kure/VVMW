@@ -254,6 +254,15 @@ namespace JLChnToZ.VRC.VVMW {
             // the first arriving movie without requiring a close/reopen.
             if (!bound && Graph() && Fields() && authority.core.HasSharedPlaybackContextForUfc &&
                 !authority.PublicationPending) ReadDraft();
+            // A different movie resets the form, including its old unsaved rows
+            // (10 Nov user request). Same-movie replay still protects edits and
+            // pending receipts. Authority retains pending work; this never submits.
+            if (bound && Graph() && Fields() && authority.core.HasSharedPlaybackContextForUfc &&
+                authority.core.SharedPlaybackIdForUfc != playback) {
+                bool otherVideo = !VRCUrl.IsNullOrEmpty(authority.core.CanonicalPcUrlForUfc) &&
+                    !authority.core.CanonicalPcUrlForUfc.Equals(primary);
+                if (otherVideo || (!authority.PublicationPending && !HasLocalEdits)) ReadDraft();
+            }
             // Only this unchanged submission's exact accepted snapshot may advance
             // the editor base. A foreign snapshot, local commit or role change cannot.
             if (bound && Graph() && !authority.PublicationPending &&
@@ -291,7 +300,7 @@ namespace JLChnToZ.VRC.VVMW {
                 pending ? "Waiting" : !string.IsNullOrEmpty(feedback) ? feedback :
                 !authority.IsReadyForPublication ? "Unavailable" : "Draft";
             Put(titleText, Tr("Title")); Put(scopeText, Tr("Scope")); Put(confirmationText, Tr("Confirm"));
-            Put(primaryText, Tr(IsDraftStale ? "DraftPrimaryUrl" : "PrimaryUrl") + ":\n" + (bound && !VRCUrl.IsNullOrEmpty(primary) ? primary.Get() : "—"));
+            Put(primaryText, Tr(IsDraftStale ? "DraftPrimaryUrl" : "PrimaryUrl") + ": " + (bound && !VRCUrl.IsNullOrEmpty(primary) ? primary.Get() : "—"));
             Put(applyText, Tr("Apply")); Put(reloadText, Tr(discardArmed ? "Discard" : "Reload")); Put(closeText, Tr("Close"));
             Put(statusText, Tr(status));
             bool body = bound && graph && (authority.core.HasSharedPlaybackContextForUfc || HasLocalEdits);
@@ -343,8 +352,8 @@ namespace JLChnToZ.VRC.VVMW {
             switch (key) {
                 case "Title": return L("Shared video sources", "Общие источники видео", "共有動画ソース");
                 case "Scope": return L("Available to everyone. Each viewer chooses their own source.", "Список доступен всем. Источник каждый выбирает у себя.", "全員に共有されます。再生ソースは各自で選びます。");
-                case "PrimaryUrl": return L("Current video · primary URL", "Текущий фильм · основной URL", "現在の動画・メインURL");
-                case "PrimaryName": return L("Primary source name", "Название основного источника", "メインソースの名前");
+                case "PrimaryUrl": return L("URL", "URL", "URL");
+                case "PrimaryName": return L("Primary source", "Основной источник", "メインソース");
                 case "Primary": return L("Primary", "Основной", "メイン");
                 case "Mirror1": return L("Mirror 1", "Зеркало 1", "ミラー1");
                 case "Mirror2": return L("Mirror 2", "Зеркало 2", "ミラー2");
