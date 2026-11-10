@@ -26,6 +26,10 @@ namespace JLChnToZ.VRC.VVMW {
         bool localTransportPresentationPendingForUfc;
         bool localTransportRouteManagedForUfc, localTransportInitialOpeningForUfc, localTransportRequestAcceptedForUfc;
         bool localTransportSeekPendingForUfc;
+        bool localTransportPausedPrerollForUfc;
+        int localTransportPrerollGenerationForUfc, localTransportPrerollRevisionForUfc = -1;
+        int localTransportPrerollSamplesForUfc;
+        float localTransportPrerollRawForUfc;
         float localTransportSeekTargetForUfc, localTransportSeekRawForUfc;
         int deferredErrorGenerationForUfc;
         UdonSharpBehaviour localTransportPresenterForUfc;
@@ -153,6 +157,45 @@ namespace JLChnToZ.VRC.VVMW {
             SetSharedTimeDuringLocalTransportForUfc(seconds);
             NotifyLocalTransportPresenterForUfc("_OnLocalTransportBeginForUfc");
             return true;
+        }
+
+        // 10 Nov: some AVPro loads cannot decode their first frame while paused.
+        // The optional presenter keeps picture/audio held while Core privately starts
+        // that decoder, observes progress plus a readable frame, then restores the
+        // latest paused target. No room state/anchor write or independent timer.
+        public bool PreparePausedLocalTransportPictureForUfc(int generation) {
+            if (generation != localTransportGenerationForUfc || !HasLocalTransportIdentityForUfc() ||
+                !HasLocalTransportPresenterForUfc(localUrl) || !localTransportReadyForUfc ||
+                !activeHandler.IsReady || isError ||
+                localTransportAlignedRevisionForUfc != localTransportRevisionForUfc) return false;
+            if (state != PAUSED) {
+                localTransportPausedPrerollForUfc = false;
+                return state == PLAYING;
+            }
+            var video = VideoTransportForUfc(activeHandler);
+            if (!Utilities.IsValid(video)) return false;
+            if (!localTransportPausedPrerollForUfc && video.HasStartedLocalTransportPictureForUfc) return true;
+            if (!localTransportPausedPrerollForUfc || localTransportPrerollGenerationForUfc != generation ||
+                localTransportPrerollRevisionForUfc != localTransportRevisionForUfc) {
+                localTransportPausedPrerollForUfc = true;
+                localTransportPrerollGenerationForUfc = generation;
+                localTransportPrerollRevisionForUfc = localTransportRevisionForUfc;
+                localTransportPrerollSamplesForUfc = 0;
+                localTransportPrerollRawForUfc = activeHandler.Time;
+                activeHandler.Play();
+                return false;
+            }
+            float raw = activeHandler.Time;
+            if (!activeHandler.IsPlaying || float.IsNaN(raw) || float.IsInfinity(raw)) return false;
+            if (raw > localTransportPrerollRawForUfc + 0.002F) localTransportPrerollSamplesForUfc++;
+            else if (raw < localTransportPrerollRawForUfc) localTransportPrerollSamplesForUfc = 0;
+            localTransportPrerollRawForUfc = raw;
+            if (localTransportPrerollSamplesForUfc < 2 || !video.RefreshLocalTransportPictureForUfc()) return false;
+            activeHandler.Pause();
+            Time = SharedTargetTimeForUfc;
+            localTransportPausedPrerollForUfc = false;
+            // Existing paused settling/capture must observe the restored target.
+            return false;
         }
 
         public bool RefreshLocalTransportPictureForUfc(int generation) {

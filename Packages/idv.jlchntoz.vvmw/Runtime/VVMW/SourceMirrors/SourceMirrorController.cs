@@ -227,6 +227,9 @@ namespace JLChnToZ.VRC.VVMW {
                 acceptedRevision=revision;alignments++;
             }
             if (core.IsLocalTransportActiveForUfc) core.ResumeLocalTransportSyncForUfc(generation);
+            if (core.IsLocalTransportActiveForUfc && !core.PreparePausedLocalTransportPictureForUfc(generation)) {
+                Hold();stableSamples=phase=0;previousRaw=-1;Queue();return;
+            }
             if (!InWindow()) {Hold();stableSamples=phase=0;previousRaw=core.Time;Queue();return;}
             if (phase==2) {
                 if (core.IsLocalTransportPresentationPendingForUfc && !core.AcknowledgeLocalTransportPresentationForUfc(generation)) {Hold();stableSamples=phase=0;Queue();return;}

@@ -50,9 +50,11 @@ namespace JLChnToZ.VRC.VVMW {
         VRCUrl loadedUrl;
         VRCUrl localCanonicalUrlForUfc, localPhysicalUrlForUfc, loadedPhysicalUrlForUfc;
         bool localLoadPendingForUfc, localLoadIssuedForUfc, nativeLoadPresentForUfc, localLoadBlockedForUfc;
+        bool pictureStartedForUfc;
         int localLoadGenerationForUfc, issuedLoadGenerationForUfc;
 
         public VRCUrl LoadedPhysicalUrlForUfc => loadedPhysicalUrlForUfc;
+        public bool HasStartedLocalTransportPictureForUfc => pictureStartedForUfc && hasTexture;
         public bool CanContinueLocalTransportLoadForUfc(int generation, VRCUrl canonicalUrl, VRCUrl physicalUrl) =>
             isActive && !IsReady && localLoadPendingForUfc && !localLoadBlockedForUfc &&
             localLoadGenerationForUfc == generation && localLoadIssuedForUfc &&
@@ -129,6 +131,7 @@ namespace JLChnToZ.VRC.VVMW {
             if (!Utilities.IsValid(current) || current.width < 16 || current.height < 16) return false;
             texture = current;
             hasTexture = true;
+            if (videoPlayer.IsPlaying) pictureStartedForUfc = true;
             isWaitingForTexture = false;
             if (!isTexturePollScheduled) {
                 isTexturePollScheduled = true;
@@ -429,6 +432,7 @@ namespace JLChnToZ.VRC.VVMW {
             issuedLoadGenerationForUfc = localLoadGenerationForUfc;
             localLoadIssuedForUfc = true;
             nativeLoadPresentForUfc = true;
+            pictureStartedForUfc = false;
             videoPlayer.LoadURL(loadedPhysicalUrlForUfc);
         }
 
@@ -531,6 +535,7 @@ namespace JLChnToZ.VRC.VVMW {
 
         public override void OnVideoStart() {
             if (IgnoreLocalTransportCallbackForUfc()) return;
+            pictureStartedForUfc = true;
             isPaused = false;
             if (isActive) core.OnVideoStart();
             WaitForTexture();
