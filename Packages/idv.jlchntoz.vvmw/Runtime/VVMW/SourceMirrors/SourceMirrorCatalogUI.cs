@@ -158,6 +158,13 @@ namespace JLChnToZ.VRC.VVMW {
             string invalid = ValidateDraftUrls();
             if (!string.IsNullOrEmpty(invalid)) { feedback = invalid; _Refresh(); return; }
             if (!authority.IsReadyForPublication || VRCUrl.IsNullOrEmpty(primary)) { feedback = "Unavailable"; _Refresh(); return; }
+            // Only a draft read from this accepted catalog may leave without a
+            // publication. A new list or an unresolved receipt still uses Save.
+            if (!HasLocalEdits && string.IsNullOrEmpty(request) && authority.catalog.IsCurrent &&
+                authority.catalog.ContextPlaybackId == playback && !VRCUrl.IsNullOrEmpty(originalUrls[0]) &&
+                originalUrls[0].Equals(primary) && primary.Equals(authority.core.CanonicalPcUrlForUfc)) {
+                ReturnToSelection(); return;
+            }
             var first = mirrorInputs[0].GetUrl(); var second = mirrorInputs[1].GetUrl();
             bool hasFirst = !VRCUrl.IsNullOrEmpty(first), hasSecond = !VRCUrl.IsNullOrEmpty(second);
             int count = 1 + (hasFirst ? 1 : 0) + (hasSecond ? 1 : 0);
@@ -176,6 +183,10 @@ namespace JLChnToZ.VRC.VVMW {
                 urls, sourceIds, labels, new[] { film, tag });
             if (!accepted) { feedback = "Rejected"; closeAfterSave = false; }
             _Refresh();
+        }
+        void ReturnToSelection() {
+            _Close();
+            if (Utilities.IsValid(sourceSelection)) sourceSelection._Open();
         }
         string SourceId(VRCUrl url) {
             for (int i = 0; i < originalUrls.Length; i++)
@@ -281,8 +292,7 @@ namespace JLChnToZ.VRC.VVMW {
                 ReadDraft(); feedback = "Confirmed";
                 if (Utilities.IsValid(fieldsScroll)) fieldsScroll.verticalNormalizedPosition = position;
                 if (returnToSelection) {
-                    _Close();
-                    if (Utilities.IsValid(sourceSelection)) sourceSelection._Open();
+                    ReturnToSelection();
                     return;
                 }
             }
@@ -308,7 +318,7 @@ namespace JLChnToZ.VRC.VVMW {
                 ownRequest && state != SourceMirrorCatalogAuthority.Confirmed ? "Rejected" :
                 !bound ? "NoVideo" : !Authorized() ? "ViewOnly" : IsDraftStale ? "Changed" :
                 pending ? "Waiting" : !string.IsNullOrEmpty(feedback) ? feedback :
-                !authority.IsReadyForPublication ? "Unavailable" : "Draft";
+                !authority.IsReadyForPublication ? "Unavailable" : HasLocalEdits ? "Unsaved" : "Draft";
             Put(titleText, Tr("Title")); Put(scopeText, Tr("Scope")); Put(confirmationText, Tr("Confirm"));
             Put(primaryText, Tr(IsDraftStale ? "DraftPrimaryUrl" : "PrimaryUrl") + ": " + (bound && !VRCUrl.IsNullOrEmpty(primary) ? primary.Get() : "—"));
             Put(applyText, Tr("Apply")); Put(reloadText, Tr(discardArmed ? "Discard" : "Reload")); Put(closeText, Tr("Close"));
@@ -382,6 +392,7 @@ namespace JLChnToZ.VRC.VVMW {
                 case "Duplicate1": return L("Mirror 1 repeats the primary URL.", "Зеркало 1 повторяет основной адрес.", "ミラー1はメインURLと重複しています。");
                 case "Duplicate2": return L("Mirror 2 repeats another source URL.", "Зеркало 2 повторяет другой источник.", "ミラー2は別のソースと重複しています。");
                 case "Close": return L("Close", "Закрыть", "閉じる");
+                case "Unsaved": return L("Unsaved changes", "Есть несохранённые изменения", "未保存の変更があります。");
                 case "Draft": return L("Mirrors must match the edit, start and speed.", "Зеркала: тот же монтаж, начало и скорость.", "ミラーは同じ編集・開始位置・速度の動画を指定してください。");
                 case "ViewOnly": return L("Only the current host can edit this list.", "Изменять список может только текущий ведущий.", "編集できるのは現在のホストのみです。");
                 case "NoVideo": return L("Start a video using the normal player controls first.", "Сначала запустите фильм обычными кнопками плеера.", "先に通常の操作で動画を開始してください。");
