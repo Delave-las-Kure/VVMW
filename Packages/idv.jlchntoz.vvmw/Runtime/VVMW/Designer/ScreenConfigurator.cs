@@ -33,7 +33,7 @@ namespace JLChnToZ.VRC.VVMW.Designer {
         [SerializeField, LocalizedLabel(Key = "JLChnToZ.VRC.VVMW.Core.screenTargetPropertyNames")] string targetPropertyName = "_MainTex";
         [SerializeField, LocalizedLabel(Key = "JLChnToZ.VRC.VVMW.Core.avProPropertyNames")] string avProPropertyName = "_IsAVProVideo";
         [SerializeField, LocalizedLabel(Key = "JLChnToZ.VRC.VVMW.Core.screenTargetDefaultTextures")] Texture defaultTexture;
-#if VRCLV3_IMPORTED
+#if VRC_LIGHT_VOLUMES && VRCLV3_IMPORTED
         [SerializeField, LocalizedLabel] internal PointLightVolume pointLightVolume;
 #endif
         Renderer previousRenderer;
@@ -176,6 +176,8 @@ namespace JLChnToZ.VRC.VVMW.Designer {
 #else
             lv.LightType = 2; // AreaLight
             lv.IsDynamic = target.GetComponentInParent<VRC_Pickup>(true) != null;
+            lv.Intensity = 1F;
+            lv.Color = Color.white;
 #endif
             Undo.RegisterCreatedObjectUndo(lvObject, "Create Light Volume for Screen");
             return lv;

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using UdonSharp;
 using UnityEngine;
 using VRC.SDKBase;
@@ -55,7 +55,7 @@ namespace JLChnToZ.VRC.VVMW {
         string[] playerNames;
         bool trustUpdated, isTrusted;
         internal bool afterFirstRun;
-        bool isOwnerSyncRequested, isReloadRequested;
+        bool isOwnerSyncRequested, isActiveOwnerSyncRequested, isReloadRequested;
         DateTime lastClickResyncTime;
         DataDictionary retryUsedPlayers = new DataDictionary();
 
@@ -238,11 +238,11 @@ namespace JLChnToZ.VRC.VVMW {
             UpdateVolume();
             if (float.IsInfinity(autoPlayDelay)) { }
             else if (!synced || Networking.IsOwner(gameObject)) SendCustomEventDelayedSeconds(nameof(_PlayDefaultUrl), autoPlayDelay);
-            else if (synced) SendCustomEventDelayedSeconds(nameof(_RequestOwnerSync), autoPlayDelay + 3);
             afterFirstRun = true;
 #if VRC_ENABLE_PLAYER_PERSISTENCE
             RestoreFromPersistence(Networking.LocalPlayer);
 #endif
+            SendEvent("_OnVizVidInit");
         }
 
         void RestoreActiveState() {
@@ -255,6 +255,14 @@ namespace JLChnToZ.VRC.VVMW {
 
         void OnDisable() {
             StopBroadcastScreenTexture();
+            if (Utilities.IsValid(activeHandler)) NotifyVideoEnd();
+        }
+
+        public override void OnPlayerJoined(VRCPlayerApi player) {
+            if (synced && Networking.IsOwner(gameObject) && !player.isLocal && !isActiveOwnerSyncRequested) {
+                isActiveOwnerSyncRequested = true;
+                SendCustomEventDelayedSeconds(nameof(OwnerSync), 1);
+            }
         }
 
         /// <summary>
@@ -346,10 +354,9 @@ namespace JLChnToZ.VRC.VVMW {
             retryCount = 0;
             lastError = VideoError.Unknown;
             trustUpdated = false;
-            isLoading = true;
             isLocalReloading = false;
             BeginSharedPlaybackForUfc(pcUrl, questUrl, playerType);
-            SendEvent("_OnVideoBeginLoad");
+            _VideoBeginLoad();
 #if AUDIOLINK_V1
             SetAudioLinkPlayBackState(MediaPlaying.Loading);
 #endif
@@ -454,6 +461,16 @@ namespace JLChnToZ.VRC.VVMW {
             else SendEvent("_OnVideoError");
         }
 
+#if COMPILER_UDONSHARP
+        public
+#else
+        internal
+#endif
+        void _VideoBeginLoad() {
+            isLoading = true;
+            SendEvent("_OnVideoBeginLoad");
+        }
+
         /// <summary>
         /// Reload the current URL.
         /// </summary>
@@ -479,8 +496,7 @@ namespace JLChnToZ.VRC.VVMW {
                 localTransportAlignedRevisionForUfc = -1;
             }
             activeHandler.LoadUrl(loadingUrl, true);
-            isLoading = true;
-            SendEvent("_OnVideoBeginLoad");
+            _VideoBeginLoad();
         }
 
         /// <summary>
@@ -671,7 +687,7 @@ namespace JLChnToZ.VRC.VVMW {
             if (videoTime > 0) Time = videoTime;
             // A paused late join has no Play callback to apply its first clock sample.
             else if (intState == PAUSED && !Networking.IsOwner(gameObject))
-                SyncTime(true);
+                SyncTime(true, false);
         }
 
         /// <summary>
@@ -724,14 +740,18 @@ namespace JLChnToZ.VRC.VVMW {
             ActivePlayer = 0;
             localUrl = synced ? null : defaultUrl;
             trustUpdated = false;
-            SendEvent("_onVideoEnd");
-#if AUDIOLINK_V1
-            if (Utilities.IsValid(audioLink)) audioLink.SetMediaPlaying(MediaPlaying.Stopped);
-#endif
+            NotifyVideoEnd();
             _OnTextureChanged();
             if (!synced || !Networking.IsOwner(gameObject)) return;
             state = IDLE;
             RequestSerialization();
+        }
+
+        void NotifyVideoEnd() {
+            SendEvent("_onVideoEnd");
+#if AUDIOLINK_V1
+            SetAudioLinkPlayBackState(MediaPlaying.Stopped);
+#endif
         }
 
         /// <summary>
@@ -752,8 +772,10 @@ namespace JLChnToZ.VRC.VVMW {
         /// Internal use, do not invoke this.
         /// </summary>
         public override void OnPreSerialization() {
-            if (!synced || (isLocalReloading && !localTransportActiveForUfc)) return;
-            lastSyncTime = Networking.GetNetworkDateTime();
+            if (!synced) return;
+            lastHealthCheckTime = Networking.GetServerTimeInSeconds();
+            if (isLocalReloading && !localTransportActiveForUfc) return;
+            lastSyncNetworkTime = Networking.GetNetworkDateTime();
             ownerNetworkTime = Networking.GetServerTimeInMilliseconds();
             syncedSpeed = speed;
             if (localTransportActiveForUfc || (localTransportPresentationPendingForUfc && state != LOADING)) {
@@ -810,6 +832,7 @@ namespace JLChnToZ.VRC.VVMW {
         /// <param name="result"></param>
         public override void OnDeserialization(DeserializationResult result) {
             if (!synced) return;
+            Heartbeat();
             bool activePlayerChanged = localActivePlayer != activePlayer;
             if (activePlayerChanged) ActivePlayer = activePlayer;
             float sendTime = result.sendTime;
@@ -856,14 +879,13 @@ namespace JLChnToZ.VRC.VVMW {
                 retryUsedPlayers.Clear();
                 retryCount = 0;
                 lastError = VideoError.Unknown;
-                isLoading = true;
                 isError = false;
                 trustUpdated = false;
                 localUrl = url;
                 AcceptSharedPlaybackSnapshotForUfc();
                 PrepareMappedReceivedLoadForUfc(url);
                 activeHandler.LoadUrl(url, false);
-                SendEvent("_OnVideoBeginLoad");
+                _VideoBeginLoad();
             }
             localUrl = url;
             if (!shouldReload) AcceptSharedPlaybackSnapshotForUfc();
@@ -887,7 +909,7 @@ namespace JLChnToZ.VRC.VVMW {
                         }
                         break;
                 }
-                if (!isLocalReloading && !isLoading) SyncTime(forceSyncTime);
+                if (!isLocalReloading && !isLoading) SyncTime(forceSyncTime, false);
             }
         }
 

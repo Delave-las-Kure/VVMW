@@ -30,8 +30,10 @@ namespace JLChnToZ.VRC.VVMW {
             nameof(OnVideoStart),
             nameof(OnVideoPlay),
             nameof(OnVideoPause),
-            nameof(OnVideoEnd)
+            nameof(OnVideoEnd),
+            nameof(_OnVizVidInit)
         ), SingletonCoreControl] public Core core;
+        [SerializeField, Resolve(nameof(core))] GameObject coreGO;
         [FieldChangeCallback(nameof(Locked))]
         [SerializeField, LocalizedLabel] bool locked = false;
         [SerializeField, LocalizedLabel] bool defaultLoop, defaultShuffle;
@@ -157,19 +159,13 @@ namespace JLChnToZ.VRC.VVMW {
             UpdateState();
         }
 
-        void OnEnable() => _Init();
+        void OnEnable() => _OnVizVidInit();
 
 #if COMPILER_UDONSHARP
         public
 #endif
-        void _Init() {
-            if (afterFirstRun) return;
-            if (!core.afterFirstRun) {
-                Debug.LogWarning("[VVMW] It seems FrontendHandler initialized before Core, and this should not happened (Hence the script execution order).\nWaiting for Core to initialize...");
-                if (gameObject.activeInHierarchy && enabled)
-                    SendCustomEventDelayedFrames(nameof(_Init), 0);
-                return;
-            }
+        void _OnVizVidInit() {
+            if (afterFirstRun || !core.afterFirstRun || !isActiveAndEnabled) return;
             urlInputFilter = core.urlInputFilter;
             core.urlInputFilter = null;
             synced = core.IsSynced;
@@ -432,7 +428,7 @@ namespace JLChnToZ.VRC.VVMW {
         public
 #endif
         void _AutoPlayNext() {
-            if ((synced && !Networking.IsOwner(gameObject)) || core.IsLoading) return;
+            if ((synced && !Networking.IsOwner(coreGO)) || core.IsLoading) return;
             if (localPlayListIndex == 0) {
                 if (IsArrayNullOrEmpty(localQueuedUrls) && !RepeatAll) {
                     if (idleMode != IdleMode.DoNothing) _AutoPlay();

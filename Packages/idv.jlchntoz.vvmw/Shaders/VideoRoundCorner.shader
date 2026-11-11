@@ -9,6 +9,7 @@
         [Vector(X, Y, Half Mode)] _StereoExtend ("Stereo Extend", Vector) = (1, 1, 0, 0)
         _AspectRatio ("Target Aspect Ratio", Float) = 1.777778
         [Toggle(_ESTIMATE_ASPECT_RATIO)] _EstimateAspectRatio ("Auto Estimate (PC Only, Experimental)", Int) = 0
+        [Toggle(_SUPER_SAMPLE)] _SuperSample ("Super Sample", Int) = 0
         _Radius ("Corner Radius", Range(0, 0.5)) = 0.05
         [Toggle(_)] _IsMirror ("Mirror Flip", Int) = 1
         [EnumMask(Direct Look, VR Handheld Camera, Desktop Handheld Camera, Screenshot, VR Mirror, VR Handheld Camera in Mirror, _, VR Screenshot in Mirror, Desktop Mirror, _, Desktop Handheld Camera in Mirror, Desktop Screenshot in Mirror)]
@@ -18,6 +19,24 @@
         [Toggle(_ALPHA_CLIP)] _AlphaClip ("Alpha Clip", Int) = 0
         _AlphaClipThreshold ("Alpha Clip Threshold", Range(0, 1)) = 0.5
         [Toggle(_STEREO_DEBUG)] _StereoDebug ("Stereo Debug", Int) = 0
+
+        [Header(Depth)]
+        [Enum(UnityEngine.Rendering.CompareFunction)] _ZTest ("Z Test", Int) = 4
+        [Toggle(_)] _ZWrite ("Z Write", Int) = 1
+
+        [Header(Stencil)]
+        [IntRange] _StencilRef ("Reference", Range(0, 255)) = 0
+        [IntRange] _StencilReadMask ("Read Mask", Range(0, 255)) = 255
+        [IntRange] _StencilWriteMask ("Write Mask", Range(0, 255)) = 255
+        [Enum(UnityEngine.Rendering.CompareFunction)] _StencilFunc ("Operation", Int) = 8
+        [Enum(UnityEngine.Rendering.StencilOp)] _StencilPass ("Pass", Int) = 0
+        [Enum(UnityEngine.Rendering.StencilOp)] _StencilFail ("Fail", Int) = 0
+        [Enum(UnityEngine.Rendering.StencilOp)] _StencilZFail ("Z Fail", Int) = 0
+
+        [Header(Blending)]
+        [Enum(UnityEngine.Rendering.BlendMode)] _SrcBlend ("Source", Int) = 1
+        [Enum(UnityEngine.Rendering.BlendMode)] _DstBlend ("Destination",Int) = 0
+        [Enum(UnityEngine.Rendering.BlendOp)] _BlendOp ("Operation", Int) = 0
     }
     SubShader {
         Name "Full"
@@ -27,6 +46,19 @@
         }
         LOD 200
         Pass {
+            Blend [_SrcBlend] [_DstBlend]
+            BlendOp [_BlendOp]
+            ZTest [_ZTest]
+            ZWrite [_ZWrite]
+            Stencil {
+                Ref [_StencilRef]
+                ReadMask [_StencilReadMask]
+                WriteMask [_StencilWriteMask]
+                Comp [_StencilFunc]
+                Pass [_StencilPass]
+                Fail [_StencilFail]
+                ZFail [_StencilZFail]
+            }
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
@@ -37,12 +69,16 @@
             #pragma multi_compile_local_fragment _ _HAS_EMISSION_INTENSITY
             #pragma multi_compile_local_fragment _ _ALPHA_CLIP
             #pragma shader_feature_local_fragment _ _STEREO_DEBUG
+            #pragma shader_feature_local_fragment _ _SUPER_SAMPLE
             #pragma shader_feature_local _ _ESTIMATE_ASPECT_RATIO
             #pragma multi_compile_fog
             #pragma multi_compile_instancing
 
             #define GEOM_SUPPORT
             #define _ROUND_CORNER
+            #ifdef _SUPER_SAMPLE
+            #define ENFORCE_POINT_SAMPLING
+            #endif
 
             #include "./VideoUnlit.cginc"
             ENDCG
@@ -56,6 +92,19 @@
         }
         LOD 100
         Pass {
+            Blend [_SrcBlend] [_DstBlend]
+            BlendOp [_BlendOp]
+            ZTest [_ZTest]
+            ZWrite [_ZWrite]
+            Stencil {
+                Ref [_StencilRef]
+                ReadMask [_StencilReadMask]
+                WriteMask [_StencilWriteMask]
+                Comp [_StencilFunc]
+                Pass [_StencilPass]
+                Fail [_StencilFail]
+                ZFail [_StencilZFail]
+            }
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
@@ -63,6 +112,7 @@
             #pragma multi_compile_local_fragment _ _HAS_EMISSION_INTENSITY
             #pragma multi_compile_local_fragment _ _ALPHA_CLIP
             #pragma shader_feature_local_fragment _ _STEREO_DEBUG
+            #pragma shader_feature_local_fragment _ _SUPER_SAMPLE
             #pragma multi_compile_fog
             #pragma multi_compile_instancing
 

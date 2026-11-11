@@ -6,6 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## 1.8.3-cinema.1 - Unreleased
+### Changed
+- Rebase UFC Cinema sources onto upstream VizVid1.8.3 (880361f), preserving
+  optional source mirrors, catalog/authority/UI and the paused-speed correction.
+- Keep upstream owner health signaling active during private mirror preparation,
+  without publishing the private decoder position or adding another sync loop.
+- Compose upstream physical-load notifications and disable guards with the
+  existing single URL executor and paused-frame texture discovery.
+
+This is a source candidate, not a published VPM archive or a new real-client
+acceptance claim. Existing published versions and listing entries are unchanged.
+
+
+## 1.8.3 - 2026-11-07
+### Fixed
+- Keep the playback history alive when a Quest URL follows a video without one [#97](https://github.com/JLChnToZ/VVMW/pull/97)
+- Pick up AVPro's new texture when the resolution changes mid-play [#96](https://github.com/JLChnToZ/VVMW/pull/96)
+- Compile error when VRCLightVolumes install after VizVid
+- Live stream video skips/replays on owner re-enables the video player
+
+## 1.8.3-beta.0 - 2026-10-18
+### Fixed
+- Some new localization key missed on merging
+- Material slider doesn't work on first cloned
+- Material variant doesn't properly connected on clone
+
+### Added
+- Super sample mode for screen shaders
+- Hybrid GI variant for video surface screen shader
+- More blending options for video unlit shaders
+
+### Changed
+- Disabling the video player will now stops the video playing, and reload when re-enabling it.
+- Make created light volume reasonability bright by default.
+- Allow manually adds light volumes with screen texture as cookie (without screen configurator).
+
 ## 1.8.2 - 2026-09-24
 ### Fixed
 - A compiler error on VRCLV first imported.
@@ -249,7 +285,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Reworked on all UI round corners rendering
 
 ## 1.4.13-beta.1 - 2025-11-17
-### Fixed 
+### Fixed
 - You can enqueue custom URL to queue list while playing a playlist entry
 
 ## 1.4.12 - 2025-10-29

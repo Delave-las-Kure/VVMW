@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using UdonSharp;
 using UnityEngine;
 using VRC.SDKBase;
@@ -31,15 +31,15 @@ namespace JLChnToZ.VRC.VVMW {
         [SerializeField, LocalizedLabel] string speedParameterName = "Speed";
         [SerializeField, LocalizedLabel] bool useSharedMaterial = true;
         [SerializeField, LocalizedLabel] AudioSource primaryAudioSource, primaryAudioSourceR;
-        [SerializeField, HideInInspector, Resolve(nameof(primaryAudioSource), NullOnly = false)] GameObject primaryAudioSourceGO;
+        [SerializeField, Resolve(nameof(primaryAudioSource), NullOnly = false)] GameObject primaryAudioSourceGO;
         [SerializeField, LocalizedLabel] bool useFlickerWorkaround = true;
         [SerializeField] bool isAvPro;
         [SerializeField, LocalizedLabel] Material blitMaterial;
         [SerializeField, LocalizedLabel] bool isLowLatency;
-        [SerializeField, HideInInspector] RateLimitResolver rateLimitResolver;
-        [SerializeField, HideInInspector, Resolve(".")] Animator animator;
-        [SerializeField, HideInInspector, Resolve(".")] BaseVRCVideoPlayer videoPlayer;
-        [SerializeField, HideInInspector, Resolve(".")] new Renderer renderer;
+        [SerializeField] RateLimitResolver rateLimitResolver;
+        [SerializeField, Resolve(".")] Animator animator;
+        [SerializeField, Resolve(".")] BaseVRCVideoPlayer videoPlayer;
+        [SerializeField, Resolve(".")] new Renderer renderer;
         RenderTexture bufferedTexture;
         bool isWaitingForTexture, isReblitRunning, isLoadUrlRequested, isTexturePollScheduled, hasTexture;
         MaterialPropertyBlock propertyBlock;
@@ -284,6 +284,11 @@ namespace JLChnToZ.VRC.VVMW {
         }
 
         void OnEnable() {
+            Initialize();
+            if (isActive && !VRCUrl.IsNullOrEmpty(currentUrl)) LoadUrl();
+        }
+
+        void Initialize() {
             if (afterFirstRun) return;
             afterFirstRun = true;
             texturePropertyID = VRCShader.PropertyToID(texturePropertyName);
@@ -295,6 +300,12 @@ namespace JLChnToZ.VRC.VVMW {
             // and then the video screen output texture will be assigned to the clone instead of the original material.
             if (useSharedMaterial)
                 renderer.sharedMaterial = renderer.material;
+        }
+
+        void OnDisable() {
+            if (!isActive) return;
+            videoPlayer.Stop();
+            nativeLoadPresentForUfc = false;
         }
 
 #if COMPILER_UDONSHARP
@@ -379,7 +390,7 @@ namespace JLChnToZ.VRC.VVMW {
             }
             if (Utilities.IsValid(blitMaterial)) {
                 blitMaterial.SetTextureOffset(texturePropertyID, Vector2.zero);
-                blitMaterial.SetTextureScale(texturePropertyID, Vector2.one);  
+                blitMaterial.SetTextureScale(texturePropertyID, Vector2.one);
                 VRCGraphics.Blit(texture, bufferedTexture, blitMaterial);
             } else
                 VRCGraphics.Blit(texture, bufferedTexture);
@@ -434,6 +445,7 @@ namespace JLChnToZ.VRC.VVMW {
             nativeLoadPresentForUfc = true;
             pictureStartedForUfc = false;
             videoPlayer.LoadURL(loadedPhysicalUrlForUfc);
+            core._VideoBeginLoad();
         }
 
         void LoadUrl() {
@@ -444,11 +456,13 @@ namespace JLChnToZ.VRC.VVMW {
                 if (delay > 0) {
                     isLoadUrlRequested = true;
                     SendCustomEventDelayedSeconds(nameof(_DoLoadUrl), delay);
-                } else if (localLoadPendingForUfc) {
-                    // One update after Stop, through the same serial executor as the rate limiter.
-                    isLoadUrlRequested = true;
-                    SendCustomEventDelayedFrames(nameof(_DoLoadUrl), 1);
-                } else LoadNativeTransportForUfc();
+                } else if (isActiveAndEnabled) {
+                    if (localLoadPendingForUfc) {
+                        // One update after Stop, through the same serial executor as the rate limiter.
+                        isLoadUrlRequested = true;
+                        SendCustomEventDelayedFrames(nameof(_DoLoadUrl), 1);
+                    } else LoadNativeTransportForUfc();
+                }
             }
         }
 
@@ -457,7 +471,7 @@ namespace JLChnToZ.VRC.VVMW {
 #endif
         void _DoLoadUrl() {
             isLoadUrlRequested = false;
-            if (!isActive || localLoadBlockedForUfc || VRCUrl.IsNullOrEmpty(currentUrl))
+            if (!isActive || localLoadBlockedForUfc || VRCUrl.IsNullOrEmpty(currentUrl) || !isActiveAndEnabled)
                 return;
             LoadNativeTransportForUfc();
         }
@@ -587,7 +601,7 @@ namespace JLChnToZ.VRC.VVMW {
             isReady = false;
             if (!isActive) return;
             ClearTexture();
-            core.OnVideoEnd();
+            if (isActiveAndEnabled) core.OnVideoEnd();
         }
 
         public override void OnVideoLoop() {

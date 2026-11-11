@@ -8,6 +8,7 @@
         [Vector(Left X, Left Y, Right X, Right Y)] _StereoShift ("Stereo Shift", Vector) = (0, 0, 0, 0)
         [Vector(X, Y, Half Mode)] _StereoExtend ("Stereo Extend", Vector) = (1, 1, 0, 0)
         _AspectRatio ("Target Aspect Ratio", Float) = 1.777778
+        [Toggle(_SUPER_SAMPLE)] _SuperSample ("Super Sample", Int) = 0
         [Toggle(_)] _IsMirror ("Mirror Flip", Int) = 1
         [EnumMask(Direct Look, VR Handheld Camera, Desktop Handheld Camera, Screenshot, VR Mirror, VR Handheld Camera in Mirror, VR Face Mirror, VR Screenshot in Mirror, Desktop Mirror, Desktop Face Mirror, Desktop Handheld Camera in Mirror, Desktop Screenshot in Mirror)]
         _RenderMode ("Visible Modes", Int) = 4095
@@ -24,23 +25,24 @@
         LOD 200
 
         CGPROGRAM
-        // Physically based Standard lighting model, and enable shadows on all light types
         #pragma surface surf Standard fullforwardshadows vertex:vert
 
-        // Use shader model 3.0 target, to get nicer looking lighting
         #pragma target 3.0
         #pragma shader_feature_fragment _EMISSION
-        #pragma shader_feature_local_fragment __ _STEREO_DEBUG
+        #pragma shader_feature_local_fragment _ _STEREO_DEBUG
+        #pragma shader_feature_local_fragment _ _SUPER_SAMPLE
+        #ifdef _SUPER_SAMPLE
+        #define ENFORCE_POINT_SAMPLING
+        #endif
         #include "Packages/idv.jlchntoz.vrcw-foundation/Shaders/VRCMirrorCameraSelector.cginc"
         #include "./VideoShaderCommon.cginc"
 
-        sampler2D _MainTex;
+        DECLARE_VIDEO_TEXTURE(_MainTex)
         float4 _Color;
         int _IsAVProVideo;
         int _ScaleMode;
         int _IsMirror;
         float _AspectRatio;
-        float4 _MainTex_TexelSize;
         float4 _StereoShift;
         float3 _StereoExtend;
         half _Glossiness;
@@ -50,13 +52,6 @@
         struct Input {
             float2 uv_MainTex;
         };
-
-        // Add instancing support for this shader. You need to check 'Enable Instancing' on materials that use the shader.
-        // See https://docs.unity3d.com/Manual/GPUInstancing.html for more information about instancing.
-        // #pragma instancing_options assumeuniformscaling
-        UNITY_INSTANCING_BUFFER_START(Props)
-            // put more per-instance properties here
-        UNITY_INSTANCING_BUFFER_END(Props)
 
         void vert (inout appdata_full v) {
             if (!isVisibleInVRC()) {
@@ -69,7 +64,11 @@
         }
 
         void surf (Input IN, inout SurfaceOutputStandard o) {
+            #if _SUPER_SAMPLE
+            half3 videoColor = frag_getVideoTextureSuperSample(_MainTex, IN.uv_MainTex, _MainTex_TexelSize, _IsAVProVideo, _StereoShift, _StereoExtend);
+            #else
             half3 videoColor = frag_getVideoTexture(_MainTex, IN.uv_MainTex, _IsAVProVideo, _StereoShift, _StereoExtend);
+            #endif
             o.Albedo = _Color.rgb + videoColor;
             o.Metallic = _Metallic;
             o.Smoothness = _Glossiness;

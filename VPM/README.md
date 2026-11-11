@@ -6,10 +6,23 @@ and the literal branch `main` are not UFC's integration/release target.
 
 ## Current source versus published release
 
-The accepted optional personal source mirrors and source UI from feature commit
-`0caf9fd826da77f721b04f11fb68c711b1c7c020` are now integrated here. All package
-files match that tested source exactly, including the `1.8.2-cinema.2` candidate
-metadata; VPM/release helpers from the stable branch are retained.
+The current source tree targets upstream VizVid1.8.3 at
+`880361f0c2d6c22649f77f656290e007fbce9880` (release1.8.3 and current develop on
+11 Nov2026), with the accepted optional mirrors from the preceding UFC stable
+source2ddd4d84 retained. Candidate package identity: `1.8.3-cinema.1` /
+`UFC-UPSTREAM-1.8.3-v1`. The upstream heartbeat/lifecycle/texture changes are
+composed with UFC's private transport and paused clock correction. Stable
+VPM/release helpers and every existing package GUID remain intact.
+
+Local checks include complete C# modules, optional-code-excluded package C#,
+121 actual Udon programs, ordinary shader imports and the existing lab SDK build.
+They do not replace a new AVPro/Photon client smoke or authorize installation in
+the main Cinema. A separate lab-only trial installed verified HybridGI0.0.4:
+all four video shaders then imported without errors and the SDK build passed.
+The dependency was disconnected and the lab restored afterward. HybridGI remains
+optional; without that addon its unused shader reports the missing include,
+while the ordinary video-output SDK build still passes. No HybridGI material
+or new lighting system is selected for Cinema by this source update.
 
 This source merge does not publish a package or change the existing VPM listing.
 The installation instructions below still describe the immutable published
