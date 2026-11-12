@@ -44,10 +44,23 @@ git worktree add --no-track -b codex/fix-queue-next 'D:/unityhub/worlds/VVMW Tas
 git push -u origin codex/fix-queue-next
 ```
 
-В sparse checkout материализовать навык `.agents/skills/ufc-vizvid-fork` вместе
-с нужными исходниками. Не принимать отсутствие файлов вне sparse-набора за
+В sparse checkout каталог `.agents/skills/ufc-vizvid-fork` должен входить в
+объявленный sparse-набор вместе с нужными исходниками. Одного наличия файлов
+на диске недостаточно: при следующем reapply файлы вне набора могут исчезнуть.
+Если каталог отсутствует в `git sparse-checkout list`, добавлять его через
+`git sparse-checkout add .agents/skills/ufc-vizvid-fork`, сохраняя прежний набор;
+не заменять весь набор командой `set` ради одного навыка. Перед изменением правил
+проверить чистоту worktree и сохранить нужные материализованные tracked-файлы,
+которые лежат вне текущего набора. После изменения `git sparse-checkout check-rules`
+для путей SKILL.md и references/workflow.md должен включать оба файла; проверить
+также их наличие на диске. Не принимать отсутствие файлов вне sparse-набора за
 их удаление из репозитория. Незакоммиченные чужие изменения не прятать и не
 заменять ради начала задачи.
+
+Ссылки из навыков Cinema должны вести к навыку в фактическом worktree stable,
+который найден через `git worktree list` (сейчас `D:/unityhub/worlds/VVMW Playback Speed`).
+Папка общего репозитория `VVMW Source` может быть checkout исторической `main`
+с локальной устаревшей копией навыка; она не подменяет production-точку входа.
 
 ## Разработка и интеграция
 

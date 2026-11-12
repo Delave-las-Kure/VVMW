@@ -26,6 +26,11 @@ Before editing, run `git worktree list` and check the actual branch. Use the
 worktree holding `ufc/cinema-stable`; at the time of this clarification it is
 `D:/unityhub/worlds/VVMW Playback Speed`. Preserve unrelated working changes.
 
+Cinema skill entry points must resolve to this skill in the actual stable
+worktree, not an old or untracked copy in a historical `main` worktree.
+In sparse worktrees, keep `.agents/skills/ufc-vizvid-fork` in the declared
+sparse selection; manually materializing its files is not a durable selection.
+
 Package versions such as `1.8.3-cinema.6` are version labels, not branch names.
 `ufc/video-mirrors` and `ufc/playback-speed-binding` are feature/candidate
 branches. Integrate qualified production fixes into `ufc/cinema-stable` within
