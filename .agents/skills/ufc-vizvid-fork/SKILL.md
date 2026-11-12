@@ -9,6 +9,10 @@ description: >-
 
 # UFC VizVid fork
 
+For task branches, integration, upstream updates and release preparation, read
+[references/workflow.md](references/workflow.md). It defines the working process
+for this fork; do not introduce another permanent integration branch.
+
 ## Primary branch
 
 The owner clarified on 12 Nov 2026 that this fork's primary production branch
