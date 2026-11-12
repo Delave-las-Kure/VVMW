@@ -3,6 +3,10 @@
 Follow [CONTRIBUTING.md](CONTRIBUTING.md), including its human audit and
 [EditorConfig](.editorconfig) requirements. Keep changes focused and easy to review.
 
+For UFC fork source, branch, integration and release work, read
+[ufc-vizvid-fork](.agents/skills/ufc-vizvid-fork/SKILL.md).
+The owner's primary branch for this fork is `ufc/cinema-stable`.
+
 ## Human Approval
 
 Before creating or amending a Git commit, ask the human for explicit approval
