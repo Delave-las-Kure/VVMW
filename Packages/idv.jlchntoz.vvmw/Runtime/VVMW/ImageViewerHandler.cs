@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using VRC.SDKBase;
 using VRC.SDK3.Image;
 using VRC.Udon.Common.Interfaces;
@@ -16,6 +16,8 @@ namespace JLChnToZ.VRC.VVMW {
     [DefaultExecutionOrder(0)]
     public class ImageViewerHandler : AbstractMediaPlayerHandler {
         VRCImageDownloader loader;
+        IVRCImageDownload currentImageDownloadForUfc;
+        bool issuingImageDownloadForUfc;
         bool loop, isPlaying;
 
 #if COMPILER_UDONSHARP
@@ -27,6 +29,8 @@ namespace JLChnToZ.VRC.VVMW {
             get => isActive;
             set {
                 isActive = value;
+                currentImageDownloadForUfc = null;
+                issuingImageDownloadForUfc = false;
                 texture = null;
                 currentUrl = null;
                 isReady = false;
@@ -75,15 +79,28 @@ namespace JLChnToZ.VRC.VVMW {
             textureInfo.WrapModeV = TextureWrapMode.Clamp;
             textureInfo.WrapModeW = TextureWrapMode.Clamp;
             textureInfo.GenerateMipMaps = core.enableMipmap;
-            loader.DownloadImage(url, null, (IUdonEventReceiver)this, textureInfo);
             currentUrl = url;
             texture = null;
             isReady = false;
             isPlaying = false;
+            currentImageDownloadForUfc = null;
+            issuingImageDownloadForUfc = true;
+            var download = loader.DownloadImage(url, null, (IUdonEventReceiver)this, textureInfo);
+            issuingImageDownloadForUfc = false;
+            if (url.Equals(currentUrl) && currentImageDownloadForUfc == null)
+                currentImageDownloadForUfc = download;
+        }
+
+        bool IsCurrentImageDownloadForUfc(IVRCImageDownload image) {
+            if (!Utilities.IsValid(image) || !Utilities.IsValid(image.Url) || !image.Url.Equals(currentUrl)) return false;
+            // InvalidURL can report synchronously before DownloadImage returns its handle.
+            if (issuingImageDownloadForUfc && currentImageDownloadForUfc == null)
+                currentImageDownloadForUfc = image;
+            return object.ReferenceEquals(currentImageDownloadForUfc, image);
         }
 
         public override void OnImageLoadSuccess(IVRCImageDownload image) {
-            if (!image.Url.Equals(currentUrl)) return;
+            if (!IsCurrentImageDownloadForUfc(image)) return;
             texture = image.Result;
             isReady = true;
             isPlaying = false;
@@ -91,6 +108,8 @@ namespace JLChnToZ.VRC.VVMW {
         }
 
         public override void OnImageLoadError(IVRCImageDownload image) {
+            if (!IsCurrentImageDownloadForUfc(image)) return;
+            currentImageDownloadForUfc = null;
             texture = null;
             currentUrl = null;
             isReady = false;
@@ -142,6 +161,8 @@ namespace JLChnToZ.VRC.VVMW {
         internal protected
 #endif
         override void Stop() {
+            currentImageDownloadForUfc = null;
+            issuingImageDownloadForUfc = false;
             texture = null;
             currentUrl = null;
             isReady = false;

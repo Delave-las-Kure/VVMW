@@ -28,6 +28,17 @@ namespace JLChnToZ.VRC.VVMW {
         }
 
         /// <summary>
+        /// The optional Quest URLs of queued items, empty when every item uses its PC URL.
+        /// </summary>
+        /// <remarks>The returned array is meant to be read only, do not modify.</remarks>
+        public VRCUrl[] QueueQuestUrls {
+            get {
+                if (!Utilities.IsValid(localQueuedQuestUrls)) localQueuedQuestUrls = new VRCUrl[0];
+                return localQueuedQuestUrls;
+            }
+        }
+
+        /// <summary>
         /// The player backend index of the queued items.
         /// </summary>
         /// <remarks>
@@ -143,16 +154,20 @@ namespace JLChnToZ.VRC.VVMW {
             RecordPlaybackHistory(pcUrl, questUrl, index, queuedTitle);
             localCurrentTitle = queuedTitle;
             RequestSync();
+            // The current queue item exists before Ready, including the first launch.
+            localPlayingPlaylistIndex = 0;
             core.PlayUrl(pcUrl, questUrl, index);
+            MarkLocalQueuePlaybackForUfc();
             UpdateTitle();
         }
 
         void PlayQueueList(int index, bool deleteOnly) {
             int newLength = Utilities.IsValid(localQueuedUrls) ? localQueuedUrls.Length : 0;
             if (newLength <= 0) {
-                if (!deleteOnly && localPlayingPlaylistIndex == 0 && index < 0 && RepeatAll) {
+                if (!deleteOnly && CanRotateCurrentQueuePlaybackForUfc() && index < 0 && RepeatAll) {
                     GetLastPlayedUrl(out VRCUrl lastPCUrl, out VRCUrl lastQuestUrl, out byte lastActivePlayer);
                     core.PlayUrl(lastPCUrl, lastQuestUrl, lastActivePlayer);
+                    MarkLocalQueuePlaybackForUfc();
                     core._ResetTitle();
                     RecordPlaybackHistory(lastPCUrl, lastQuestUrl, lastActivePlayer, localCurrentTitle);
                 }
@@ -172,7 +187,7 @@ namespace JLChnToZ.VRC.VVMW {
                 }
                 index = Shuffle ? UnityEngine.Random.Range(0, newLength) : 0;
             }
-            var shouldReEnqueue = !deleteOnly && localPlayingPlaylistIndex == 0 && RepeatAll;
+            var shouldReEnqueue = !deleteOnly && CanRotateCurrentQueuePlaybackForUfc() && RepeatAll;
             if (!shouldReEnqueue) newLength--;
             var url = localQueuedUrls[index];
             bool hasQuestUrl = !IsArrayNullOrEmpty(localQueuedQuestUrls);
@@ -212,7 +227,10 @@ namespace JLChnToZ.VRC.VVMW {
             localQueuedTitles = newTitles;
             if (!deleteOnly) {
                 localCurrentTitle = title;
+                // Mark only after deciding whether an older item belongs in this rotation.
+                localPlayingPlaylistIndex = 0;
                 core.PlayUrl(url, questUrl, playerIndex);
+                MarkLocalQueuePlaybackForUfc();
                 UpdateTitle();
                 RecordPlaybackHistory(url, questUrl, playerIndex, title);
             }
@@ -239,7 +257,9 @@ namespace JLChnToZ.VRC.VVMW {
         }
 
         void GetLastPlayedUrl(out VRCUrl pcUrl, out VRCUrl questUrl, out byte playerIndex) {
-            if (core.IsReady || core.IsLocalTransportActiveForUfc) {
+            // Loading skips do not Stop first, so LastUrl can still belong to the previous item.
+            if (core.IsReady || core.IsLocalTransportActiveForUfc ||
+                (core.IsLoading && core.ActivePlayer != 0 && !VRCUrl.IsNullOrEmpty(core.Url))) {
 #if UNITY_ANDROID || UNITY_IOS
                 pcUrl = core.AltUrl;
                 questUrl = core.Url;

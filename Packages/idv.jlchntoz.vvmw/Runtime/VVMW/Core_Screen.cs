@@ -356,6 +356,7 @@ namespace JLChnToZ.VRC.VVMW {
         }
 
         void ValidateScreen() {
+            if (screenTargets == null) screenTargets = new Object[0];
             screenOptions.Clear();
             EnsureArraySize(ref screenTargetModes, screenTargets.Length);
             EnsureArraySize(ref screenTargetIndeces, screenTargets.Length);

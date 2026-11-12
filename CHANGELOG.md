@@ -6,6 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## 1.8.3-cinema.6 - Unreleased
+### Fixed
+- Preserve malformed URL escapes instead of throwing while generating queue titles.
+- Correlate received queue origins with Core playback identity before rotating a
+  loading item, without reviving a failed item during its retry.
+- Ignore retired image-download callbacks, including replacement requests for the
+  same URL, while preserving synchronous SDK completion and error delivery.
+
+## 1.8.3-cinema.5 - Unreleased
+### Fixed
+- Mark queue-origin launches before native readiness so the first loading item
+  remains in Repeat queue without appending empty or unrelated history.
+- Keep recoverable playback errors in Loading until the retry succeeds or ends.
+- Validate the current retry record and deadline before a delayed wakeup may
+  reload, so old retries cannot clear a newer terminal error or run it early.
+
+## 1.8.3-cinema.4 - Unreleased
+### Fixed
+- Cancel older deferred queue advances on a received Stop transition, while
+  preserving a new Next after an already accepted Idle snapshot.
+- Rotate the actual skipped loading URL and backend in Repeat queue.
+- Accept the native End during explicit Stop of a reload, clearing selection
+  and recording the stopped media; recover stale handlerless selection too.
+
+## 1.8.3-cinema.3 - Unreleased
+### Fixed
+- Cancel older deferred manual/automatic queue advances when Core Stop supersedes
+  them, while retaining ordered explicit requests and new commands after Stop.
+- Validate a newly added Core with an empty screen list without an editor exception.
+
+## 1.8.3-cinema.2 - Unreleased
+### Fixed
+- Clear a cancelled local load when receiving Idle, stopping without an active
+  handler, or accepting a video end, so native queue advancement is not stranded
+  by a retained loading flag. Preserve non-idle and private-transport guards.
+
 ## 1.8.3-cinema.1 - Unreleased
 ### Changed
 - Rebase UFC Cinema sources onto upstream VizVid1.8.3 (880361f), preserving

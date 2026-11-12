@@ -1,0 +1,71 @@
+{
+  "version": "1.8.3-cinema.6",
+  "fixes": [
+    "Malformed UTF-8 URL title decoding",
+    "Stop after terminal error",
+    "Received Loading RepeatAll origin",
+    "Stale Remove/Clear full identity",
+    "Retired image callbacks including same-URL requests"
+  ],
+  "installedSourcePins": {
+    "Packages/idv.jlchntoz.vvmw/Runtime/VVMW/FrontendHandler_QueueList.cs": "b95f25f82e624a6464fd609b244a0b4a5d5fe7ae8789c0faa285d8ea8ab603c1",
+    "Packages/idv.jlchntoz.vvmw/Runtime/VVMW/FrontendHandler_URLUtil.cs": "4e96ce32693a197ee43e5af82226a3d1578b315af8d41331f8aed081557809b8",
+    "Assets/UFC/Udon/UfcVideoShell.cs": "88138cd665e2ce0b9ffead7e1e1eabbecbbcf377423a1b311d613aa8e5751e7f",
+    "Packages/idv.jlchntoz.vvmw/package.json": "75b5453ab20200cce92d616a024742b994732c2833c7426f41bdd35778255c7f",
+    "Packages/idv.jlchntoz.vvmw/Runtime/VVMW/FrontendHandler.cs": "5747c7f99ba678f52dea1f48c6ad0f89782f138a51bac5bdb54af9ec5d4750bb",
+    "Assets/UFC/Editor/UfcCinemaVideoSpeed.cs": "62b0b3227f7ae95891da4295adde4352b7a48871020ec8a344d6f24ae7b77308",
+    "Packages/idv.jlchntoz.vvmw/Runtime/VVMW/ImageViewerHandler.cs": "5d208e889085276ff122953653201504d54ccca41998b6951eeda651c94a63b1",
+    "Packages/vpm-manifest.json": "fa9a0a657bc4011cb49695daf39af9c18777f29b386e2df78f4f2fa9c3464cf3"
+  },
+  "boundaries": {
+    "network": "Seeded receive/owner snapshots; no actual Photon handoff",
+    "videoError": "Seeded handler error with physical decoder stopped; ordinary retry limits",
+    "image": "Real installed SDK HTTP responses and request handles",
+    "acceptanceRemaining": [
+      "Two VRChat clients",
+      "AVPro",
+      "HMD"
+    ],
+    "teardown": "One SDK image-handle finalizer warning at Play exit; existing teardown omission, request owner unknown; not excluded as fixture-only"
+  },
+  "passed": true,
+  "sourcePins": {
+    "CHANGELOG.md": "97e3d171fadab6d0fb208b350123a744f2109d7797245bfb50baff618c21b410",
+    "Packages/idv.jlchntoz.vvmw/package.json": "75b5453ab20200cce92d616a024742b994732c2833c7426f41bdd35778255c7f",
+    "Packages/idv.jlchntoz.vvmw/Runtime/VVMW/Core.cs": "de081dd692a2a0ec3d0efc2239301b8d06a64682e908d97bad0afc38442e8721",
+    "Packages/idv.jlchntoz.vvmw/Runtime/VVMW/Core_Screen.cs": "00815142b843f9b240d05a9fcc74b38305fedf70a49d922d5b698d42927652b3",
+    "Packages/idv.jlchntoz.vvmw/Runtime/VVMW/FrontendHandler.cs": "5747c7f99ba678f52dea1f48c6ad0f89782f138a51bac5bdb54af9ec5d4750bb",
+    "Packages/idv.jlchntoz.vvmw/Runtime/VVMW/FrontendHandler_QueueList.cs": "b95f25f82e624a6464fd609b244a0b4a5d5fe7ae8789c0faa285d8ea8ab603c1",
+    "Packages/idv.jlchntoz.vvmw/Runtime/VVMW/FrontendHandler_URLUtil.cs": "4e96ce32693a197ee43e5af82226a3d1578b315af8d41331f8aed081557809b8",
+    "Packages/idv.jlchntoz.vvmw/Runtime/VVMW/ImageViewerHandler.cs": "5d208e889085276ff122953653201504d54ccca41998b6951eeda651c94a63b1"
+  },
+  "validation": {
+    "csharpModules": 4,
+    "csharpInputs": 875,
+    "udonPrograms": 120,
+    "queueBaselineAssertions": 188,
+    "queueFixedAssertions": 6238,
+    "shellFixedAssertions": 69,
+    "imageFixedAssertions": 30,
+    "priorCoreAssertions": 29,
+    "priorIdleAssertions": 22,
+    "priorRetryAssertions": 41,
+    "nativeStaleAssertions": 48,
+    "nativeTerminalAssertions": 17,
+    "nativeRoleAssertions": 128,
+    "nativeOwnerAssertions": 28,
+    "nativeImageCases": [
+      "late distinct URL404",
+      "late same URL404",
+      "current404 and Stop"
+    ]
+  },
+  "evidence": "Uran Fracture Cinema/Concept/video_player_queue_fix_20261112",
+  "precedingFixEvidence": [
+    "video_queue_stall_20261112",
+    "video_queue_stop_fix_20261112",
+    "video_queue_extended_fix_20261112",
+    "video_retry_cold_fix_20261112"
+  ],
+  "runtimeSourcesChangedDuringPromotion": false
+}

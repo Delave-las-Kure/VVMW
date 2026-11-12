@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using UnityEngine;
 using UnityEngine.Serialization;
 using VRC.SDKBase;
@@ -44,11 +44,19 @@ namespace JLChnToZ.VRC.VVMW {
         [SerializeField, LocalizedLabel] bool seedRandomBeforeShuffle = true;
         InputFilterBase urlInputFilter;
         [UdonSynced] byte flags;
+        // Correlate queue provenance with Core's immutable URL/backend launch header.
+        [UdonSynced] string queuePlaybackIdForUfc;
+        string localQueuePlaybackIdForUfc, failedQueuePlaybackIdForUfc;
+        VRCUrl localQueuePcUrlForUfc, localQueueQuestUrlForUfc;
+        byte localQueuePlayerForUfc;
         int localPlayingPlaylistIndex = -1;
         bool forceStop;
         bool synced;
         byte localFlags;
         bool afterFirstRun, isDataArrivedBeforeInit;
+        byte[] pendingAdvancesForUfc = new byte[0];
+        int pendingAdvanceStopRevisionForUfc;
+        bool advanceEventScheduledForUfc;
 
         /// <summary>
         /// Whether the frontend is locked.
@@ -276,7 +284,7 @@ namespace JLChnToZ.VRC.VVMW {
             if (core.ActivePlayer == 0 || core.State < 3) { // Stop() will not work if there is no active player (nothing is playing)
                 if (!Networking.IsOwner(gameObject))
                     Networking.SetOwner(Networking.LocalPlayer, gameObject);
-                SendCustomEventDelayedFrames(nameof(_PlayNext), 0);
+                ScheduleAdvanceForUfc(true);
             } else
                 core.Stop();
             SendEvent("_OnSkip");
@@ -299,7 +307,12 @@ namespace JLChnToZ.VRC.VVMW {
         public override void OnVideoReady() {
             UpdateState();
             forceStop = false;
+            failedQueuePlaybackIdForUfc = "";
             localPlayingPlaylistIndex = localPlayListIndex;
+            if (localPlayListIndex == 0 && (!synced || !core.IsSynced ||
+                (Networking.IsOwner(gameObject) && Networking.IsOwner(coreGO))))
+                MarkLocalQueuePlaybackForUfc();
+            RestoreReceivedQueueOriginForUfc();
         }
         /// <inheritdoc cref="Core.OnVideoStart" />
         public override void OnVideoStart() => UpdateState();
@@ -314,7 +327,7 @@ namespace JLChnToZ.VRC.VVMW {
                 forceStop = false;
                 return;
             }
-            SendCustomEventDelayedFrames(nameof(_AutoPlayNext), 0);
+            ScheduleAdvanceForUfc(false);
         }
 
 #if COMPILER_UDONSHARP
@@ -322,19 +335,61 @@ namespace JLChnToZ.VRC.VVMW {
 #endif
         void _OnVideoError() {
             UpdateState();
+            failedQueuePlaybackIdForUfc = core.SharedPlaybackIdForUfc;
             localPlayingPlaylistIndex = -1;
             if (forceStop) {
                 forceStop = false;
                 return;
             }
             // If already gave up, try next one
-            if (!core.IsLoading) SendCustomEventDelayedFrames(nameof(_AutoPlayNext), 0);
+            if (!core.IsLoading) ScheduleAdvanceForUfc(false);
+        }
+
+        void ScheduleAdvanceForUfc(bool manual) {
+            int revision = core.LocalStopRevisionForUfc;
+            if (pendingAdvanceStopRevisionForUfc != revision) {
+                pendingAdvancesForUfc = new byte[0];
+                pendingAdvanceStopRevisionForUfc = revision;
+            }
+            var pending = new byte[pendingAdvancesForUfc.Length + 1];
+            Array.Copy(pendingAdvancesForUfc, pending, pendingAdvancesForUfc.Length);
+            pending[pending.Length - 1] = manual ? (byte)1 : (byte)0;
+            pendingAdvancesForUfc = pending;
+            ScheduleAdvanceEventForUfc();
+        }
+
+        void ScheduleAdvanceEventForUfc() {
+            if (advanceEventScheduledForUfc) return;
+            advanceEventScheduledForUfc = true;
+            SendCustomEventDelayedFrames(nameof(_RunPendingAdvanceForUfc), 0);
         }
 
 #if COMPILER_UDONSHARP
         public
 #endif
-        void _OnVideoBeginLoad() => UpdateState();
+        void _RunPendingAdvanceForUfc() {
+            advanceEventScheduledForUfc = false;
+            if (pendingAdvanceStopRevisionForUfc != core.LocalStopRevisionForUfc) {
+                pendingAdvancesForUfc = new byte[0];
+                return;
+            }
+            if (pendingAdvancesForUfc.Length == 0) return;
+            bool manual = pendingAdvancesForUfc[0] != 0;
+            var remaining = new byte[pendingAdvancesForUfc.Length - 1];
+            Array.Copy(pendingAdvancesForUfc, 1, remaining, 0, remaining.Length);
+            pendingAdvancesForUfc = remaining;
+            if (manual) _PlayNext();
+            else _AutoPlayNext();
+            if (pendingAdvancesForUfc.Length > 0) ScheduleAdvanceEventForUfc();
+        }
+
+#if COMPILER_UDONSHARP
+        public
+#endif
+        void _OnVideoBeginLoad() {
+            RestoreReceivedQueueOriginForUfc();
+            UpdateState();
+        }
 
 #if COMPILER_UDONSHARP
         public
@@ -370,6 +425,7 @@ namespace JLChnToZ.VRC.VVMW {
             historyTitles = !Utilities.IsValid(localHistoryTitles) ? "" : string.Join("\u2029", localHistoryTitles);
             currentTitle = localCurrentTitle;
             flags = localFlags;
+            queuePlaybackIdForUfc = CanRotateCurrentQueuePlaybackForUfc() ? localQueuePlaybackIdForUfc : "";
             playListIndex = (ushort)localPlayListIndex;
             lastPlayingIndex = localLastPlayingIndex;
             playingIndex = localPlayingIndex;
@@ -408,6 +464,15 @@ namespace JLChnToZ.VRC.VVMW {
             localPlayListIndex = playListIndex;
             localPlayingIndex = playingIndex;
             localLastPlayingIndex = lastPlayingIndex;
+            // A frontend packet must not attribute an older Core packet to its new queue.
+            if (localPlayListIndex != 0 || string.IsNullOrEmpty(queuePlaybackIdForUfc) ||
+                queuePlaybackIdForUfc != localQueuePlaybackIdForUfc) {
+                localQueuePlaybackIdForUfc = "";
+                localQueuePcUrlForUfc = localQueueQuestUrlForUfc = null;
+                localQueuePlayerForUfc = 0;
+                localPlayingPlaylistIndex = -1;
+            }
+            RestoreReceivedQueueOriginForUfc();
             core.Loop = RepeatOne;
             UpdateState();
         }
@@ -418,6 +483,7 @@ namespace JLChnToZ.VRC.VVMW {
         public void _PlayNext() {
             forceStop = false;
             if (synced && !Networking.IsOwner(gameObject)) return;
+            RestoreReceivedQueueOriginForUfc();
             if (localPlayListIndex == 0)
                 PlayQueueList(-1, false);
             else
@@ -429,6 +495,7 @@ namespace JLChnToZ.VRC.VVMW {
 #endif
         void _AutoPlayNext() {
             if ((synced && !Networking.IsOwner(coreGO)) || core.IsLoading) return;
+            RestoreReceivedQueueOriginForUfc();
             if (localPlayListIndex == 0) {
                 if (IsArrayNullOrEmpty(localQueuedUrls) && !RepeatAll) {
                     if (idleMode != IdleMode.DoNothing) _AutoPlay();
@@ -443,6 +510,52 @@ namespace JLChnToZ.VRC.VVMW {
                 PlayPlayList(-1);
             }
         }
+
+        void MarkLocalQueuePlaybackForUfc() {
+            // A synchronous native error may already have excluded this launch.
+            if (localPlayListIndex != 0 || localPlayingPlaylistIndex != 0 || core.HasLocalTransportErrorForUfc ||
+                core.ActivePlayer == 0 || VRCUrl.IsNullOrEmpty(core.Url)) return;
+            string id = core.SharedPlaybackIdForUfc;
+            if (synced && core.IsSynced &&
+                (string.IsNullOrEmpty(id) || id == failedQueuePlaybackIdForUfc)) return;
+            localQueuePlaybackIdForUfc = id;
+            GetLastPlayedUrl(out localQueuePcUrlForUfc, out localQueueQuestUrlForUfc, out localQueuePlayerForUfc);
+            if (VRCUrl.IsNullOrEmpty(localQueueQuestUrlForUfc)) localQueueQuestUrlForUfc = localQueuePcUrlForUfc;
+        }
+
+        void RestoreReceivedQueueOriginForUfc() {
+            if (!synced || !core.IsSynced || localPlayListIndex != 0 || core.HasLocalTransportErrorForUfc ||
+                (!core.IsLoading && !core.IsReady && !core.IsLocalTransportActiveForUfc) ||
+                core.ActivePlayer == 0 || VRCUrl.IsNullOrEmpty(core.Url) ||
+                string.IsNullOrEmpty(queuePlaybackIdForUfc) ||
+                queuePlaybackIdForUfc != core.SharedPlaybackIdForUfc ||
+                queuePlaybackIdForUfc == failedQueuePlaybackIdForUfc) return;
+            localQueuePlaybackIdForUfc = queuePlaybackIdForUfc;
+            GetLastPlayedUrl(out localQueuePcUrlForUfc, out localQueueQuestUrlForUfc, out localQueuePlayerForUfc);
+            if (VRCUrl.IsNullOrEmpty(localQueueQuestUrlForUfc)) localQueueQuestUrlForUfc = localQueuePcUrlForUfc;
+            localPlayingPlaylistIndex = 0;
+        }
+
+        bool CanRotateCurrentQueuePlaybackForUfc() {
+            if (localPlayListIndex != 0 || localPlayingPlaylistIndex != 0 || core.HasLocalTransportErrorForUfc) return false;
+            bool current = core.ActivePlayer != 0 && !VRCUrl.IsNullOrEmpty(core.Url) &&
+                (core.IsLoading || core.IsReady || core.IsLocalTransportActiveForUfc);
+            bool ended = core.ActivePlayer == 0 && (VRCUrl.IsNullOrEmpty(core.Url) || !core.IsSynced) && !core.IsLoading &&
+                core.LastActivePlayer != 0 && !VRCUrl.IsNullOrEmpty(core.LastUrl);
+            if (!current && !ended) return false;
+            if (!synced || !core.IsSynced) {
+                if (current) return true;
+            } else if (string.IsNullOrEmpty(localQueuePlaybackIdForUfc) ||
+                localQueuePlaybackIdForUfc == failedQueuePlaybackIdForUfc ||
+                (current && localQueuePlaybackIdForUfc != core.SharedPlaybackIdForUfc)) return false;
+            GetLastPlayedUrl(out VRCUrl pc, out VRCUrl quest, out byte player);
+            if (VRCUrl.IsNullOrEmpty(quest)) quest = pc;
+            return player == localQueuePlayerForUfc && QueuePlaybackUrlEqualsForUfc(pc, localQueuePcUrlForUfc) &&
+                QueuePlaybackUrlEqualsForUfc(quest, localQueueQuestUrlForUfc);
+        }
+
+        bool QueuePlaybackUrlEqualsForUfc(VRCUrl a, VRCUrl b) =>
+            a == b || (!VRCUrl.IsNullOrEmpty(a) && !VRCUrl.IsNullOrEmpty(b) && a.Equals(b));
 
         /// <inheritdoc cref="PlayAt(int, int, bool)" />
         [Obsolete("Use PlayAt instead.")]

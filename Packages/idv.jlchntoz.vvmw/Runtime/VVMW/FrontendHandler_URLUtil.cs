@@ -47,11 +47,9 @@ namespace JLChnToZ.VRC.VVMW {
                 }
                 int utf32, length;
                 if      ((b & 0x80) == 0x00) { utf32 = b;        length = 1; }
-                else if ((b & 0xE0) == 0xC0) { utf32 = b & 0x1F; length = 2; }
+                else if (b >= 0xC2 && b <= 0xDF) { utf32 = b & 0x1F; length = 2; }
                 else if ((b & 0xF0) == 0xE0) { utf32 = b & 0x0F; length = 3; }
-                else if ((b & 0xF8) == 0xF0) { utf32 = b & 0x07; length = 4; }
-                else if ((b & 0xFC) == 0xF8) { utf32 = b & 0x03; length = 5; }
-                else if ((b & 0xFE) == 0xFC) { utf32 = b & 0x01; length = 6; }
+                else if (b >= 0xF0 && b <= 0xF4) { utf32 = b & 0x07; length = 4; }
                 else { result += '%'; index++; continue; } // Invalid UTF-8
                 // Not enough bytes
                 if (index + length * 3 > title.Length) {
@@ -59,17 +57,24 @@ namespace JLChnToZ.VRC.VVMW {
                     index++;
                     continue;
                 }
+                bool invalid = false;
                 for (int i = 1; i < length; i++) {
                     offset = index + i * 3;
                     if (title[offset] != '%' ||
                         !byte.TryParse(title.Substring(offset + 1, 2), NumberStyles.HexNumber, null, out b) ||
                         (b & 0xC0) != 0x80) {
-                        result += '%';
-                        utf32 = 0;
+                        invalid = true;
                         break;
                     }
                     utf32 <<= 6;
                     utf32 |= b & 0x3F;
+                }
+                // Preserve malformed escapes as text; title generation must not throw on a URL.
+                if (invalid || utf32 > 0x10FFFF || (utf32 >= 0xD800 && utf32 <= 0xDFFF) ||
+                    (length == 3 && utf32 < 0x800) || (length == 4 && utf32 < 0x10000)) {
+                    result += '%';
+                    index++;
+                    continue;
                 }
                 if (utf32 == 0) {
                     index++;

@@ -50,6 +50,12 @@ namespace JLChnToZ.VRC.VVMW {
         bool loop;
         AbstractMediaPlayerHandler activeHandler;
         int retryCount = 0;
+        bool retryReloadPendingForUfc;
+        double retryReloadDueForUfc;
+        int retryReloadStopRevisionForUfc;
+        byte retryReloadPlayerForUfc;
+        VRCUrl retryReloadUrlForUfc;
+        AbstractMediaPlayerHandler retryReloadHandlerForUfc;
         bool isLoading, isLocalReloading, isError;
         VideoError lastError = VideoError.Unknown;
         string[] playerNames;
@@ -254,6 +260,7 @@ namespace JLChnToZ.VRC.VVMW {
         }
 
         void OnDisable() {
+            CancelRetryReloadForUfc();
             StopBroadcastScreenTexture();
             if (Utilities.IsValid(activeHandler)) NotifyVideoEnd();
         }
@@ -337,6 +344,7 @@ namespace JLChnToZ.VRC.VVMW {
                 url = pcUrl;
                 playerType = (byte)autoPlayPlayerType;
             }
+            CancelRetryReloadForUfc();
 #if UNITY_ANDROID || UNITY_IOS
             if (!VRCUrl.IsNullOrEmpty(questUrl)) {
                 localUrl = questUrl;
@@ -380,6 +388,7 @@ namespace JLChnToZ.VRC.VVMW {
         /// </summary>
         /// <param name="videoError"></param>
         public override void OnVideoError(VideoError videoError) {
+            CancelRetryReloadForUfc();
             if (!localTransportActiveForUfc && HasLocalTransportPresentationForUfc())
                 RetainLocalTransportFailureAuthorityForUfc();
             if (!localTransportActiveForUfc && (IsMappedTransportForUfc() || WatchesLocalTransportLoadForUfc(localUrl))) {
@@ -403,6 +412,7 @@ namespace JLChnToZ.VRC.VVMW {
             isError = true;
             lastError = videoError;
             deferredErrorGenerationForUfc = localTransportGenerationForUfc;
+            deferredErrorStopRevisionForUfc = localStopRevisionForUfc;
             SendCustomEventDelayedFrames(nameof(_DeferSendErrorEvent), 0);
 #if AUDIOLINK_V1
             SetAudioLinkPlayBackState(MediaPlaying.Error);
@@ -437,11 +447,55 @@ namespace JLChnToZ.VRC.VVMW {
                         }
                     } else
                         retryCount++;
-                    SendCustomEventDelayedSeconds(nameof(_ReloadUrl), retryDelay);
+                    // The frontend must wait until this recovery attempt succeeds or gives up.
+                    isLoading = true;
+                    ScheduleRetryReloadForUfc();
                     return;
                 }
             }
             isLoading = false;
+        }
+
+        void CancelRetryReloadForUfc() {
+            retryReloadPendingForUfc = false;
+            retryReloadUrlForUfc = null;
+            retryReloadHandlerForUfc = null;
+        }
+
+        void ScheduleRetryReloadForUfc() {
+            retryReloadUrlForUfc = localUrl;
+            retryReloadPlayerForUfc = localActivePlayer;
+            retryReloadHandlerForUfc = activeHandler;
+            retryReloadStopRevisionForUfc = localStopRevisionForUfc;
+            retryReloadDueForUfc = UnityEngine.Time.timeAsDouble + retryDelay;
+            retryReloadPendingForUfc = true;
+            SendCustomEventDelayedSeconds(nameof(_RetryReloadUrlForUfc), retryDelay);
+        }
+
+#if COMPILER_UDONSHARP
+        public
+#endif
+        void _RetryReloadUrlForUfc() {
+            if (!retryReloadPendingForUfc) return;
+            if (!enabled || !gameObject.activeInHierarchy || !isLoading ||
+                retryReloadStopRevisionForUfc != localStopRevisionForUfc ||
+                retryReloadPlayerForUfc != localActivePlayer ||
+                !Utilities.IsValid(activeHandler) || activeHandler != retryReloadHandlerForUfc ||
+                VRCUrl.IsNullOrEmpty(localUrl) || !localUrl.Equals(retryReloadUrlForUfc) ||
+                localTransportActiveForUfc || localTransportPresentationPendingForUfc ||
+                IsMappedTransportForUfc() || localTransportRouteManagedForUfc || HasLocalTransportPresentationForUfc()) {
+                CancelRetryReloadForUfc();
+                return;
+            }
+            // A stale wakeup may precede a newer retry's deadline. Never load it early.
+            double remaining = retryReloadDueForUfc - UnityEngine.Time.timeAsDouble;
+            if (remaining > 0.001) {
+                SendCustomEventDelayedSeconds(nameof(_RetryReloadUrlForUfc), (float)remaining);
+                return;
+            }
+            // Consume once before entering the native loader; duplicate wakeups are harmless.
+            CancelRetryReloadForUfc();
+            _ReloadUrl();
         }
 
         void SwitchActiveHandler(AbstractMediaPlayerHandler newHandler) {
@@ -456,7 +510,8 @@ namespace JLChnToZ.VRC.VVMW {
         public
 #endif
         void _DeferSendErrorEvent() {
-            if (deferredErrorGenerationForUfc != localTransportGenerationForUfc) return;
+            if (!isError || deferredErrorGenerationForUfc != localTransportGenerationForUfc ||
+                deferredErrorStopRevisionForUfc != localStopRevisionForUfc) return;
             if (localTransportActiveForUfc || HasLocalTransportPresentationForUfc() || IsMappedTransportForUfc()) SendEvent("_OnLocalTransportErrorForUfc");
             else SendEvent("_OnVideoError");
         }
@@ -478,13 +533,13 @@ namespace JLChnToZ.VRC.VVMW {
             if (IsMappedTransportForUfc() || localTransportRouteManagedForUfc || HasLocalTransportPresentationForUfc()) {
                 return; // A stale stock retry must neither restart nor clear a private failure.
             }
-            isError = false;
             if (VRCUrl.IsNullOrEmpty(loadingUrl) ||
                 (synced && state == IDLE) ||
                 !loadingUrl.Equals(localUrl)) {
                 retryUsedPlayers.Clear();
                 return;
             }
+            isError = false;
             if (!synced && localUrl.Equals(defaultUrl)) {
                 retryUsedPlayers.Clear();
                 PlayUrl(null, 0);
@@ -540,6 +595,7 @@ namespace JLChnToZ.VRC.VVMW {
         }
 
         void ReloadUrlCore() {
+            CancelRetryReloadForUfc();
             if (synced) {
 #if UNITY_ANDROID || UNITY_IOS
                 if (!VRCUrl.IsNullOrEmpty(questUrl))
@@ -614,14 +670,33 @@ namespace JLChnToZ.VRC.VVMW {
             RequestSync();
         }
 
+        int localStopRevisionForUfc, deferredErrorStopRevisionForUfc;
+        public int LocalStopRevisionForUfc => localStopRevisionForUfc;
+
         /// <summary>
         /// Stop the current video.
         /// </summary>
         public void Stop() {
+            CancelRetryReloadForUfc();
+            // Invalidate older deferred queue commands before Stop can emit End callbacks.
+            localStopRevisionForUfc++;
             CancelLocalTransportForUfc();
             var handler = activeHandler;
             ClearSharedPlaybackForUfc();
-            if (!Utilities.IsValid(handler)) return;
+            if (!Utilities.IsValid(handler)) {
+                // An idle receiver can retain a cancelled native load without a handler.
+                localUrl = synced ? null : defaultUrl;
+                loadingUrl = null;
+                isLoading = isLocalReloading = isError = false;
+                lastError = VideoError.Unknown;
+                trustUpdated = false;
+                RequestSync();
+                return;
+            }
+            // Explicit Stop supersedes reload guards before the native End callback.
+            // Let that single accepted End retire the URL and record the stopped media.
+            loadingUrl = null;
+            isLocalReloading = false;
             handler.Stop();
             SetRangeInternal(-1, -1);
             if (!handler.IsReady) { // Cancel loading if it is still loading
@@ -640,6 +715,7 @@ namespace JLChnToZ.VRC.VVMW {
         /// Internal use, do not invoke this.
         /// </summary>
         public override void OnVideoReady() {
+            CancelRetryReloadForUfc();
             ResetSyncTimeSamples();
             if (localTransportActiveForUfc) FinishMappedInitialReadyForUfc();
             if (localTransportActiveForUfc) {
@@ -733,10 +809,12 @@ namespace JLChnToZ.VRC.VVMW {
         public override void OnVideoEnd() {
             if (localTransportActiveForUfc || localTransportPresentationPendingForUfc) return;
             if (!VRCUrl.IsNullOrEmpty(loadingUrl) || isLocalReloading) return;
+            CancelRetryReloadForUfc();
             lastActivePlayer = activePlayer;
             lastUrl = localUrl;
             lastAltUrl = altUrl;
             ClearSharedPlaybackForUfc();
+            isLoading = isError = false;
             ActivePlayer = 0;
             localUrl = synced ? null : defaultUrl;
             trustUpdated = false;
@@ -832,6 +910,12 @@ namespace JLChnToZ.VRC.VVMW {
         /// <param name="result"></param>
         public override void OnDeserialization(DeserializationResult result) {
             if (!synced) return;
+            // Capture the transition before ActivePlayer can emit a native End.
+            // Repeated Idle snapshots must not cancel a fresh Next from an idle player.
+            bool receivedStopForUfc = state == IDLE && (localActivePlayer != 0 ||
+                isLoading || isLocalReloading || localTransportActiveForUfc ||
+                localTransportPresentationPendingForUfc || !VRCUrl.IsNullOrEmpty(localUrl));
+            if (receivedStopForUfc) CancelRetryReloadForUfc();
             Heartbeat();
             bool activePlayerChanged = localActivePlayer != activePlayer;
             if (activePlayerChanged) ActivePlayer = activePlayer;
@@ -869,6 +953,7 @@ namespace JLChnToZ.VRC.VVMW {
                 }
             }
             if (shouldReload) {
+                CancelRetryReloadForUfc();
                 if (!Utilities.IsValid(activeHandler)) {
                     AcceptSharedPlaybackSnapshotForUfc();
                     Debug.LogWarning($"[VVMW] Owner serialization incomplete, will queue a sync request.");
@@ -890,6 +975,13 @@ namespace JLChnToZ.VRC.VVMW {
             localUrl = url;
             if (!shouldReload) AcceptSharedPlaybackSnapshotForUfc();
             if (shouldReload) LoadYTTL();
+            if (state == IDLE) {
+                // A received Stop cancels the local load even when ActivePlayer is already zero.
+                // Leaving isLoading set strands both the native queue and consumer controls.
+                loadingUrl = null;
+                isLoading = isLocalReloading = isError = false;
+                lastError = VideoError.Unknown;
+            }
             if (!shouldReload && state == PAUSED && AdoptLocalTransportForPresenterForUfc() > 0) return;
             if (Utilities.IsValid(activeHandler) && activeHandler.IsReady) {
                 bool forceSyncTime = false;
@@ -911,6 +1003,8 @@ namespace JLChnToZ.VRC.VVMW {
                 }
                 if (!isLocalReloading && !isLoading) SyncTime(forceSyncTime, false);
             }
+            // Retire callbacks created both before and during the received Stop.
+            if (receivedStopForUfc) localStopRevisionForUfc++;
         }
 
         bool RequestSync() {
