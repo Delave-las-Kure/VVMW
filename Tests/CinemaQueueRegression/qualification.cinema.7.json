@@ -1,0 +1,145 @@
+{
+  "formatVersion": 1,
+  "status": "PASS",
+  "packageVersion": "1.8.3-cinema.7",
+  "sourcePins": {
+    "Packages/idv.jlchntoz.vvmw/Runtime/VVMW/Core.cs": "8f36555318539edcdaa6d56cbe0798ddc2cc8d991f5b21313c1463bbe0601caa",
+    "Packages/idv.jlchntoz.vvmw/Runtime/VVMW/FrontendHandler_QueueList.cs": "d29ab343b7eb0fcd2567f8d448c93b0db4862d7084d783c6e942ccc2c7acc0d8",
+    "Packages/idv.jlchntoz.vvmw/Runtime/VVMW/ImageViewerHandler.cs": "dd5bb76bda881d1ac39ec1483501462900c5ffa5a7d10e3a5bfdda3315fd8acd"
+  },
+  "sourceIntegrity": {
+    "taskInstalledStageCandidateMatch": true,
+    "installedWriteCount": 6,
+    "collectorRuntimePinsMatch": true
+  },
+  "modelQualification": {
+    "queue": {
+      "status": "pass",
+      "baselineAssertions": 56,
+      "fixedAssertions": 134456,
+      "fixedCases": 13728,
+      "priorRegressionAssertions": 6238,
+      "platforms": [
+        "PC",
+        "Quest compile branch"
+      ]
+    },
+    "imageLifetime": {
+      "status": "pass",
+      "assertions": 153,
+      "sourceBodies": 10
+    },
+    "coreFallback": {
+      "status": "pass",
+      "ownershipAssertions": 27,
+      "priorCoreAssertions": 29,
+      "retryAssertions": 41
+    }
+  },
+  "integration": {
+    "csharp": {
+      "status": "pass",
+      "fullModules": 4,
+      "sourceInputs": 885,
+      "frozenRuntimePinsMatch": true
+    },
+    "udon": {
+      "status": "pass-recorded",
+      "programs": 120,
+      "outputs": 120,
+      "errors": false
+    }
+  },
+  "native": {
+    "queuePlatformPairRotation": {
+      "status": "pass",
+      "assertions": 46,
+      "compiledUdon": true,
+      "platform": "PC",
+      "seededCurrentLoadingOrEofAndQueue": true,
+      "physicalQuestOrBuild": false,
+      "photon": false
+    },
+    "imageLifetime": {
+      "status": "pass",
+      "assertions": 1456,
+      "realFrames": 1713,
+      "elapsedSeconds": 20.336452600000484,
+      "enqueues": 9,
+      "nexts": 6,
+      "stops": 3,
+      "maxObservedLoaderSlots": 2,
+      "actualCompiledUdon": true,
+      "actualSdkHandles": true,
+      "destroyCallbackInvokedExplicitly": true,
+      "sdkOrQueueErrorCallbacksSeeded": false,
+      "gpuBytesMeasured": false
+    },
+    "broadcast": {
+      "status": "pass",
+      "firstValidGlobalObserved": true,
+      "finalGlobalValid": false,
+      "actualShaderGlobalRead": true,
+      "gpuBytesMeasured": false
+    },
+    "distinctQuestEnqueueControl": {
+      "status": "not-run",
+      "pass_": null,
+      "assertions": null,
+      "receipt": null,
+      "reason": "Stock native helper exposes no actual alternate/mobile URL input. Actual mobile enqueue was unavailable; complete actual-body PC/Quest matrix and seeded compiled native platform-pair rotation passed. This is a disclosed coverage limit, not a pending acceptance gate."
+    }
+  },
+  "acceptanceBoundaries": [
+    "Quest conditional compilation is not physical Quest-client acceptance",
+    "Seeded owner/receive/current queue boundaries do not certify actual Photon handoff",
+    "Native image checks measure SDK State/Result lifetime, not native GPU memory residency",
+    "The destroy callback boundary was explicitly invoked in the compiled native probe",
+    "No world upload or public VPM archive publication is implied"
+  ],
+  "evidence": {
+    "companionProject": "Uran Fracture Cinema",
+    "taskDirectory": "Concept/video_post_merge_fix_20261112",
+    "receipts": {
+      "queue/qualification.json": "9d0a5e99d1450000e098bd725b68745d09a045b4a5873d1fb36df3675c071ff9",
+      "queue/previous-regressions.json": "49925286b980c0d3ca8495a58b488a87f291765ea3f353c654a15ff9cf02a257",
+      "image/report.json": "5c3c342f4a448d3d5cdcbb0745a1284140e975280e2bbd4aae30495158a2de30",
+      "image/core-fallback-seal.json": "e355231ae0bc6879a293e3da69b695ff47f28395444d9d21646e505e2234afe8",
+      "csharp-candidate/report.json": "d7a40be2b4b7af30cb5e571b49642739a20c1e19bd4f28461fb1fc86dbf53d8a",
+      "udon.json": "e069471f5658915e0bf2047579ea59d990f792973b3ff76f676427a936206133",
+      "quest-native-rotation.json": "d0fc57ec5dffab52810e454463c67aef8ce125c78f46b8fbe229365ab9c619ed",
+      "native-image-lifetime.json": "817a40f165ad45bc1ff71e2077b768fe0e6fa3a431237271df656f21a6b0c20d",
+      "native-broadcast.json": "a7ab3636dfe1528495622c6c959ed763cb59eb9111f4a9af7d0ef833a6f50e27",
+      "final.json": "648e1ba5eedfa84353dbbcccf50918e3fb7424446d34b0d3c611f7d13a897fb6",
+      "play-final/restoration.json": "a885ab12f652679a2e0fd81a1d524b8dcb344be0fd3da38afbcf561ab7da4a17",
+      "play-final/scene-restoration.json": "0b5dfa62e1ea651a6f78d333f71175fc72afe191b9ee88be584b4b43209b2085"
+    }
+  },
+  "qualificationScope": "Bounded source/model, C#/Udon and native PC acceptance; no physical Quest or Photon acceptance",
+  "preservation": {
+    "status": "pass",
+    "installedWriteCount": 6,
+    "sceneTransforms": 6152,
+    "missingScripts": 0,
+    "originalSceneFileUnchanged": true,
+    "otherScopedSourcesUnchanged": true,
+    "installedSourcesMatch": true,
+    "sourceOverlayUnchanged": true,
+    "versionMetadataMatches": true,
+    "uiSuspensionRestored": true,
+    "originalSceneWritten": false,
+    "playRestorationPass": true,
+    "sceneRestorationPass": true,
+    "sceneObjectsCompared": 24479
+  },
+  "delivery": {
+    "taskCommits": {
+      "queue": "c5c05680e49b15b5464456036dc4c2e7f2e7d24e",
+      "imageAndCore": "d6baba49889afda6bdcd083b702c951f50a0aa77",
+      "operations": "257ee7deb405b5a2480dfae29be62fb52f4a77d4"
+    },
+    "collectorMergeHead": "13a8ead7a5d3426650bcc1274cfc4f18c1a3e18c",
+    "taskBranchesMerged": true,
+    "stableMergeAndPush": "separate delivery step; not certified by this qualification"
+  }
+}

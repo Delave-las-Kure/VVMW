@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## 1.8.3-cinema.7 - Unreleased
+### Fixed
+- Backfill earlier PC-only queue rows when the optional mobile URL array is first
+  materialized, keeping URL, backend and title indices aligned.
+- Preserve the current film's distinct mobile URL when Repeat queue rotates it
+  into a queue whose waiting rows all use their PC URLs.
+- Dispose retired image requests on replacement, Stop, deactivation and destroy,
+  retaining the previous presented image only until its replacement is presented.
+  Keep synchronous SDK callbacks correlated with their current loader and request.
+- Refresh output texture bindings when Core switches to a fallback backend, so
+  outputs do not retain a released image from the previous handler.
+
 ## 1.8.3-cinema.6 - Unreleased
 ### Fixed
 - Preserve malformed URL escapes instead of throwing while generating queue titles.
