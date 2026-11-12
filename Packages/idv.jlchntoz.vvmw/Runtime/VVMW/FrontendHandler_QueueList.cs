@@ -122,7 +122,10 @@ namespace JLChnToZ.VRC.VVMW {
                     bool isQuestQueueEmpty = IsArrayNullOrEmpty(localQueuedQuestUrls);
                     if (!pcUrl.Equals(questUrl) || !isQuestQueueEmpty) {
                         if (isQuestQueueEmpty) {
-                            localQueuedQuestUrls = new VRCUrl[] { questUrl };
+                            // Materializing the optional array must backfill every earlier PC-only row.
+                            localQueuedQuestUrls = new VRCUrl[localQueuedUrls.Length];
+                            Array.Copy(localQueuedUrls, localQueuedQuestUrls, localQueuedUrls.Length);
+                            localQueuedQuestUrls[localQueuedQuestUrls.Length - 1] = questUrl;
                         } else {
                             var newAltQueue = new VRCUrl[localQueuedQuestUrls.Length + 1];
                             Array.Copy(localQueuedQuestUrls, newAltQueue, localQueuedQuestUrls.Length);
@@ -188,21 +191,34 @@ namespace JLChnToZ.VRC.VVMW {
                 index = Shuffle ? UnityEngine.Random.Range(0, newLength) : 0;
             }
             var shouldReEnqueue = !deleteOnly && CanRotateCurrentQueuePlaybackForUfc() && RepeatAll;
+            var questQueue = localQueuedQuestUrls;
+            bool hasQuestUrl = !IsArrayNullOrEmpty(questQueue);
+            VRCUrl requeuePCUrl = null, requeueQuestUrl = null;
+            byte requeuePlayer = 0;
+            if (shouldReEnqueue) {
+                GetLastPlayedUrl(out requeuePCUrl, out requeueQuestUrl, out requeuePlayer);
+                if (VRCUrl.IsNullOrEmpty(requeueQuestUrl)) requeueQuestUrl = requeuePCUrl;
+                if (!hasQuestUrl && !VRCUrl.IsNullOrEmpty(requeueQuestUrl) && !requeueQuestUrl.Equals(requeuePCUrl)) {
+                    // The current film may need a Quest URL even when all waiting rows use their PC URL.
+                    questQueue = new VRCUrl[localQueuedUrls.Length];
+                    Array.Copy(localQueuedUrls, questQueue, localQueuedUrls.Length);
+                    hasQuestUrl = true;
+                }
+            }
             if (!shouldReEnqueue) newLength--;
             var url = localQueuedUrls[index];
-            bool hasQuestUrl = !IsArrayNullOrEmpty(localQueuedQuestUrls);
-            var questUrl = hasQuestUrl ? localQueuedQuestUrls[index] : url;
+            var questUrl = hasQuestUrl ? questQueue[index] : url;
             var playerIndex = localQueuedPlayerIndex[index];
             var title = localQueuedTitles[index];
             var newQueue = newLength == localQueuedUrls.Length ? localQueuedUrls : new VRCUrl[newLength];
-            var newQuestQueue = hasQuestUrl ? newLength == localQueuedQuestUrls.Length ? localQueuedQuestUrls : new VRCUrl[newLength] : null;
+            var newQuestQueue = hasQuestUrl ? newLength == questQueue.Length ? questQueue : new VRCUrl[newLength] : null;
             var newPlayerIndexQueue = newLength == localQueuedUrls.Length ? localQueuedPlayerIndex : new byte[newLength];
             var newTitles = newLength == localQueuedUrls.Length ? localQueuedTitles : new string[newLength];
             if (index > 0) {
                 if (localQueuedUrls != newQueue)
                     Array.Copy(localQueuedUrls, 0, newQueue, 0, index);
-                if (hasQuestUrl && localQueuedQuestUrls != newQuestQueue)
-                    Array.Copy(localQueuedQuestUrls, 0, newQuestQueue, 0, index);
+                if (hasQuestUrl && questQueue != newQuestQueue)
+                    Array.Copy(questQueue, 0, newQuestQueue, 0, index);
                 if (localQueuedPlayerIndex != newPlayerIndexQueue)
                     Array.Copy(localQueuedPlayerIndex, 0, newPlayerIndexQueue, 0, index);
                 if (localQueuedTitles != newTitles)
@@ -210,15 +226,14 @@ namespace JLChnToZ.VRC.VVMW {
             }
             int copyCount = Mathf.Min(localQueuedUrls.Length - 1, newLength) - index;
             Array.Copy(localQueuedUrls, index + 1, newQueue, index, copyCount);
-            if (hasQuestUrl) Array.Copy(localQueuedQuestUrls, index + 1, newQuestQueue, index, copyCount);
+            if (hasQuestUrl) Array.Copy(questQueue, index + 1, newQuestQueue, index, copyCount);
             Array.Copy(localQueuedPlayerIndex, index + 1, newPlayerIndexQueue, index, copyCount);
             Array.Copy(localQueuedTitles, index + 1, newTitles, index, copyCount);
             if (shouldReEnqueue) {
                 int lastIndex = newLength - 1;
-                GetLastPlayedUrl(out VRCUrl lastPCUrl, out VRCUrl lastQuestUrl, out byte lastActivePlayer);
-                newQueue[lastIndex] = lastPCUrl;
-                if (hasQuestUrl) newQuestQueue[lastIndex] = lastQuestUrl;
-                newPlayerIndexQueue[lastIndex] = lastActivePlayer;
+                newQueue[lastIndex] = requeuePCUrl;
+                if (hasQuestUrl) newQuestQueue[lastIndex] = requeueQuestUrl;
+                newPlayerIndexQueue[lastIndex] = requeuePlayer;
                 newTitles[lastIndex] = localCurrentTitle;
             }
             localQueuedUrls = newQueue;
@@ -261,20 +276,20 @@ namespace JLChnToZ.VRC.VVMW {
             if (core.IsReady || core.IsLocalTransportActiveForUfc ||
                 (core.IsLoading && core.ActivePlayer != 0 && !VRCUrl.IsNullOrEmpty(core.Url))) {
 #if UNITY_ANDROID || UNITY_IOS
-                pcUrl = core.AltUrl;
+                pcUrl = VRCUrl.IsNullOrEmpty(core.AltUrl) ? core.Url : core.AltUrl;
                 questUrl = core.Url;
 #else
                 pcUrl = core.Url;
-                questUrl = core.AltUrl;
+                questUrl = VRCUrl.IsNullOrEmpty(core.AltUrl) ? core.Url : core.AltUrl;
 #endif
                 playerIndex = core.ActivePlayer;
             } else {
 #if UNITY_ANDROID || UNITY_IOS
-                pcUrl = core.LastAltUrl;
+                pcUrl = VRCUrl.IsNullOrEmpty(core.LastAltUrl) ? core.LastUrl : core.LastAltUrl;
                 questUrl = core.LastUrl;
 #else
                 pcUrl = core.LastUrl;
-                questUrl = core.LastAltUrl;
+                questUrl = VRCUrl.IsNullOrEmpty(core.LastAltUrl) ? core.LastUrl : core.LastAltUrl;
 #endif
                 playerIndex = core.LastActivePlayer;
             }
