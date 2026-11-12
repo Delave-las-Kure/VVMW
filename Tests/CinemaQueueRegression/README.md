@@ -1,5 +1,10 @@
 # Cinema queue lifecycle regression qualification
 
+For the Cinema.7 queue and bounded image-lifetime follow-up, see
+[README.cinema.7.md](README.cinema.7.md) and
+[qualification.cinema.7.json](qualification.cinema.7.json). The Cinema.6 record
+below is retained as historical qualification.
+
 This records the qualified `1.8.3-cinema.6` source candidate, including all
 previous cinema.2 through cinema.5 queue/Stop/retry corrections. Source hashes
 and bounded verification results are in `qualification.json`.

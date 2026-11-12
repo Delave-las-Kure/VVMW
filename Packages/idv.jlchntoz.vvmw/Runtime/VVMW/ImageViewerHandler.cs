@@ -16,8 +16,13 @@ namespace JLChnToZ.VRC.VVMW {
     [DefaultExecutionOrder(0)]
     public class ImageViewerHandler : AbstractMediaPlayerHandler {
         VRCImageDownloader loader;
+        VRCImageDownloader heldImageLoaderForUfc;
         IVRCImageDownload currentImageDownloadForUfc;
+        TextureInfo currentImageTextureInfoForUfc;
         bool issuingImageDownloadForUfc;
+        bool currentImagePresentedForUfc;
+        bool imageDestroyedForUfc;
+        int imageLoadRevisionForUfc;
         bool loop, isPlaying;
 
 #if COMPILER_UDONSHARP
@@ -29,12 +34,7 @@ namespace JLChnToZ.VRC.VVMW {
             get => isActive;
             set {
                 isActive = value;
-                currentImageDownloadForUfc = null;
-                issuingImageDownloadForUfc = false;
-                texture = null;
-                currentUrl = null;
-                isReady = false;
-                isPlaying = false;
+                RetireImageDownloadsForUfc(false);
             }
         }
 
@@ -68,24 +68,37 @@ namespace JLChnToZ.VRC.VVMW {
         internal protected
 #endif
         override void LoadUrl(VRCUrl url, bool reload) {
-            if (!Utilities.IsValid(loader)) loader = new VRCImageDownloader();
+            if (imageDestroyedForUfc) return;
             if (url.Equals(currentUrl) && !reload && Utilities.IsValid(texture)) {
                 isReady = true;
                 if (isActive) core.OnVideoReady();
                 return;
             }
+            int revision = RetireImageDownloadsForUfc(true);
+            if (revision != imageLoadRevisionForUfc) return;
+            var imageLoader = new VRCImageDownloader();
+            loader = imageLoader;
             var textureInfo = new TextureInfo();
             textureInfo.WrapModeU = TextureWrapMode.Clamp;
             textureInfo.WrapModeV = TextureWrapMode.Clamp;
             textureInfo.WrapModeW = TextureWrapMode.Clamp;
             textureInfo.GenerateMipMaps = core.enableMipmap;
+            currentImageTextureInfoForUfc = textureInfo;
             currentUrl = url;
             texture = null;
             isReady = false;
             isPlaying = false;
             currentImageDownloadForUfc = null;
             issuingImageDownloadForUfc = true;
-            var download = loader.DownloadImage(url, null, (IUdonEventReceiver)this, textureInfo);
+            var download = imageLoader.DownloadImage(url, null, (IUdonEventReceiver)this, textureInfo);
+            if (revision != imageLoadRevisionForUfc || !object.ReferenceEquals(loader, imageLoader)) {
+                // Synchronous callbacks can retire the loader before the SDK adds its handle.
+                if (!object.ReferenceEquals(loader, imageLoader) && !object.ReferenceEquals(heldImageLoaderForUfc, imageLoader)) {
+                    if (Utilities.IsValid(download)) download.Dispose();
+                    imageLoader.Dispose();
+                }
+                return;
+            }
             issuingImageDownloadForUfc = false;
             if (url.Equals(currentUrl) && currentImageDownloadForUfc == null)
                 currentImageDownloadForUfc = download;
@@ -94,7 +107,8 @@ namespace JLChnToZ.VRC.VVMW {
         bool IsCurrentImageDownloadForUfc(IVRCImageDownload image) {
             if (!Utilities.IsValid(image) || !Utilities.IsValid(image.Url) || !image.Url.Equals(currentUrl)) return false;
             // InvalidURL can report synchronously before DownloadImage returns its handle.
-            if (issuingImageDownloadForUfc && currentImageDownloadForUfc == null)
+            if (issuingImageDownloadForUfc && currentImageDownloadForUfc == null &&
+                object.ReferenceEquals(currentImageTextureInfoForUfc, image.TextureInfo))
                 currentImageDownloadForUfc = image;
             return object.ReferenceEquals(currentImageDownloadForUfc, image);
         }
@@ -109,14 +123,11 @@ namespace JLChnToZ.VRC.VVMW {
 
         public override void OnImageLoadError(IVRCImageDownload image) {
             if (!IsCurrentImageDownloadForUfc(image)) return;
-            currentImageDownloadForUfc = null;
-            texture = null;
-            currentUrl = null;
-            isReady = false;
-            isPlaying = false;
-            if (isActive) {
+            var imageError = image.Error;
+            int revision = RetireImageDownloadsForUfc(true);
+            if (revision == imageLoadRevisionForUfc && isActive) {
                 var error = VideoError.Unknown;
-                switch (image.Error) {
+                switch (imageError) {
                     case VRCImageDownloadError.DownloadError:
                     case VRCImageDownloadError.InvalidImage:
                         error = VideoError.PlayerError;
@@ -141,10 +152,17 @@ namespace JLChnToZ.VRC.VVMW {
         internal protected
 #endif
         override void Play() {
+            if (!isReady || !Utilities.IsValid(texture)) return;
             isPlaying = true;
             if (isActive) {
+                int revision = imageLoadRevisionForUfc;
                 core.OnVideoPlay();
-                if (texture) core._OnTextureChanged();
+                if (revision != imageLoadRevisionForUfc || !Utilities.IsValid(texture)) return;
+                var previousImageLoader = heldImageLoaderForUfc;
+                heldImageLoaderForUfc = null;
+                currentImagePresentedForUfc = true;
+                core._OnTextureChanged();
+                if (Utilities.IsValid(previousImageLoader)) previousImageLoader.Dispose();
             }
         }
 
@@ -161,13 +179,43 @@ namespace JLChnToZ.VRC.VVMW {
         internal protected
 #endif
         override void Stop() {
+            int revision = RetireImageDownloadsForUfc(false);
+            if (revision == imageLoadRevisionForUfc && isActive) core.OnVideoEnd();
+        }
+
+        int RetireImageDownloadsForUfc(bool preservePresentedImage) {
+            int revision = ++imageLoadRevisionForUfc;
+            var retiringLoader = loader;
+            var previousHeldLoader = heldImageLoaderForUfc;
+            bool retainCurrent = preservePresentedImage && currentImagePresentedForUfc;
+            // Retire callback identity before Dispose can invoke synchronous SDK callbacks.
+            loader = null;
             currentImageDownloadForUfc = null;
+            currentImageTextureInfoForUfc = null;
             issuingImageDownloadForUfc = false;
+            currentImagePresentedForUfc = false;
             texture = null;
             currentUrl = null;
             isReady = false;
             isPlaying = false;
-            if (isActive) core.OnVideoEnd();
+            if (preservePresentedImage) {
+                // Core can still present A while B prepares. Keep at most that one loader.
+                if (retainCurrent) {
+                    heldImageLoaderForUfc = retiringLoader;
+                    retiringLoader = previousHeldLoader;
+                }
+            } else
+                heldImageLoaderForUfc = null;
+            if (Utilities.IsValid(retiringLoader) && !object.ReferenceEquals(retiringLoader, heldImageLoaderForUfc))
+                retiringLoader.Dispose();
+            if (!preservePresentedImage && Utilities.IsValid(previousHeldLoader) && !object.ReferenceEquals(previousHeldLoader, retiringLoader))
+                previousHeldLoader.Dispose();
+            return revision;
+        }
+
+        void OnDestroy() {
+            imageDestroyedForUfc = true;
+            RetireImageDownloadsForUfc(false);
         }
 
 #if COMPILER_UDONSHARP
