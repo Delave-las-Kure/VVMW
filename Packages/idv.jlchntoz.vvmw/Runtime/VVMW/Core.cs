@@ -504,6 +504,7 @@ namespace JLChnToZ.VRC.VVMW {
             activeHandler.IsActive = false;
             activeHandler = newHandler;
             activeHandler.IsActive = true;
+            _OnTextureChanged();
         }
 
 #if COMPILER_UDONSHARP
