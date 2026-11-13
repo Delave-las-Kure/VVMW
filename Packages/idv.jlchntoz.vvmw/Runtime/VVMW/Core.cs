@@ -551,8 +551,8 @@ namespace JLChnToZ.VRC.VVMW {
                 localTransportReadyForUfc = false;
                 localTransportAlignedRevisionForUfc = -1;
             }
-            activeHandler.LoadUrl(loadingUrl, true);
             _VideoBeginLoad();
+            activeHandler.LoadUrl(loadingUrl, true);
         }
 
         /// <summary>
@@ -970,8 +970,8 @@ namespace JLChnToZ.VRC.VVMW {
                 localUrl = url;
                 AcceptSharedPlaybackSnapshotForUfc();
                 PrepareMappedReceivedLoadForUfc(url);
-                activeHandler.LoadUrl(url, false);
                 _VideoBeginLoad();
+                activeHandler.LoadUrl(url, false);
             }
             localUrl = url;
             if (!shouldReload) AcceptSharedPlaybackSnapshotForUfc();
