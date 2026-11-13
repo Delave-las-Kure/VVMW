@@ -224,11 +224,12 @@ namespace JLChnToZ.VRC.VVMW {
         internal protected
 #endif
         override int IsSupported(string urlStr) {
+            if (string.IsNullOrEmpty(urlStr)) return -1;
             int index = urlStr.IndexOf('#');
-            if (index < 0) {
-                index = urlStr.IndexOf('?');
-                if (index < 0) index = urlStr.Length;
-            }
+            if (index < 0) index = urlStr.Length;
+            int queryIndex = urlStr.IndexOf('?');
+            if (queryIndex >= 0 && queryIndex < index) index = queryIndex;
+            if (index == 0) return -1;
             int startIndex = urlStr.LastIndexOf('.', index - 1) + 1;
             if (startIndex < 0 || startIndex >= index) return -1;
             switch (urlStr.Substring(startIndex, index - startIndex).ToLower()) {

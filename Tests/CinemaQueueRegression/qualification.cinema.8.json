@@ -1,0 +1,344 @@
+{
+  "schema": "ufc.cinema.queue-qualification.v1",
+  "version": "1.8.3-cinema.8",
+  "isDraft": false,
+  "overallStatus": "PASS_BOUNDED",
+  "passed": true,
+  "baseBranch": "ufc/cinema-stable",
+  "baseCommit": "2c39f88c0cdf47721458a06d1ced8361fe49467d",
+  "integrationBranch": "codex/fix-cinema-eight",
+  "fixes": [
+    {
+      "owner": "fork",
+      "summary": "Initialize Loading before synchronous same-image receive/reload readiness or terminal error callbacks."
+    },
+    {
+      "owner": "fork",
+      "summary": "Parse authority after bounding HTTP query/fragment text; valid no-path URLs cannot throw in automatic backend detection."
+    },
+    {
+      "owner": "fork",
+      "summary": "Use the earliest query/fragment delimiter for support scoring, preserving signed image and media extension routing."
+    },
+    {
+      "owner": "fork",
+      "summary": "A new accepted BeginLoad supersedes retained Stop intent before its first terminal error."
+    },
+    {
+      "owner": "fork",
+      "summary": "Normalize paragraph separators in display titles before the existing queue/history row delimiter serialization."
+    },
+    {
+      "owner": "companion Cinema project",
+      "summary": "Retain Remove identity from PointerDown through refresh/PointerUp/click and reject a replaced row."
+    }
+  ],
+  "unchangedPackageRuntimePins": {
+    "Runtime/VVMW/Core_Timing.cs": "58ad311ca60e6fff277bc73fa91d14f31b9db385fc3b18c4fc735b481ac222b2",
+    "Runtime/VVMW/Core_Screen.cs": "00815142b843f9b240d05a9fcc74b38305fedf70a49d922d5b698d42927652b3",
+    "Runtime/VVMW/Core_SharedPlayback.cs": "95b7dad8371458955795e68ae4408e1d4eba86d427796222e1887ecf50930533",
+    "Runtime/VVMW/Core_LocalTransport.cs": "af887b30fea72ac18d84fd646a1dc2bd22f9fcd54ddf618c490322b5229daa26"
+  },
+  "installedSourcePins": {
+    "Assets/UFC/Editor/UfcCinemaVideoQueuePress.cs": "52ee880dab4c28addc5990cc2cea13c234f8aea81f2ed826de10558767edc970",
+    "Assets/UFC/Editor/UfcCinemaVideoQueuePress.cs.meta": "41997a1677727db68e856824530e2e292f43d78de1dd8dca7d00df1863eeb17c",
+    "Assets/UFC/Editor/UfcCinemaVideoShell.cs": "9bd20c550bd6358e06405d4eb69015484b45322d331cd58977ac0ae8d8065d79",
+    "Assets/UFC/Editor/UfcCinemaVideoSpeed.cs": "89f2c1bfb46c91d21f56f56eaae7f7dea1e31ed02def9005962a59324f39106d",
+    "Assets/UFC/Udon/UfcVideoQueuePress.cs": "49b213db56b4a688eea0a87d4baf4a6d575dea5a8531cb564b2198e9d7490582",
+    "Assets/UFC/Udon/UfcVideoQueuePress.cs.meta": "e366263c15ab9010137125878a7543d1db1226f14a3ac99fa406ef5cbe091484",
+    "Assets/UFC/Udon/UfcVideoShell.cs": "2eb97ec0c33e5c49984b5a7560c15b1249d0ecc673ddaff91123c85093d82635",
+    "Packages/idv.jlchntoz.vvmw/package.json": "d438dc2ab6b1679742d563ab4c8c319f40f5c91ab53bb8f1ce334de563947130",
+    "Packages/idv.jlchntoz.vvmw/Runtime/VVMW/Core.cs": "264a8fe240d3265714d707232d951d4b76bf25109442083f2b66f975b4cce980",
+    "Packages/idv.jlchntoz.vvmw/Runtime/VVMW/FrontendHandler.cs": "bbd67a9d9cb2caaae4c0945981c3138d67d243a89cb655b9c55b4c63b03dc6ac",
+    "Packages/idv.jlchntoz.vvmw/Runtime/VVMW/FrontendHandler_QueueList.cs": "15157ea5d4a8d3e37a3b5d317f605c867db8aef56e5de0fe99953070d379ab4b",
+    "Packages/idv.jlchntoz.vvmw/Runtime/VVMW/ImageViewerHandler.cs": "e86c19896ad82aa222dc19b16edb3cae5fe1759c68f8654b70b30908f9cb6fcf",
+    "Packages/idv.jlchntoz.vvmw/Runtime/VVMW/VideoPlayerHandler.cs": "c1f250e93744fc4a104ec8061d3a9af2bbc6238c03f2f63bdd5a8ee22829ce7b",
+    "Packages/vpm-manifest.json": "10f5b18e8af287ddc692693733e49600fcfce85aa0166ffdfb8b40440accddbb"
+  },
+  "validation": {
+    "fullCSharp": {
+      "status": "PASS",
+      "modules": 4,
+      "sourceInputs": 899,
+      "scope": "Four full Unity C# modules with 899 real source inputs, final installed changed C# pins matched; Udon and native are separately qualified below.",
+      "receipt": "csharp-final/report.json",
+      "exactChangedSourcePinsMatched": true
+    },
+    "queue": {
+      "status": "PASS",
+      "baselineAssertions": 186,
+      "fixedAssertions": 140984,
+      "targetedAndImportedFixedAssertions": 290,
+      "priorQueueAssertions": 134456,
+      "priorProvenanceAndUrlAssertions": 6238,
+      "scope": "Actual bodies with controlled SDK/receive boundaries; PC and UNITY_ANDROID compile branches."
+    },
+    "selectors": {
+      "status": "PASS",
+      "baselineAssertions": 396,
+      "fixedAssertions": 12940,
+      "urlCasesPerFixedPlatform": 1071,
+      "fixedAvailabilityShapes": 3,
+      "scope": "Actual support/protocol/Core selector/Shell resolver bodies; PC and UNITY_ANDROID compiler symbols, controlled handler availability."
+    },
+    "core": {
+      "status": "PASS",
+      "baselineCachedReceiveAssertions": 16,
+      "fixedCachedReceiveAssertions": 16,
+      "priorCoreAssertions": 29,
+      "priorRetryAssertions": 41,
+      "scope": "Exact receive/ready/shared-header/image-cache bodies plus prior Core/retry regressions; controlled scheduler/native/receive boundaries."
+    },
+    "independentCoreReview": {
+      "status": "PASS",
+      "assertions": 62,
+      "cachedReceiveAssertions": 16,
+      "reloadBaselineAssertions": 23,
+      "reloadFixedAssertions": 23,
+      "scope": "Read-only byte-exact two-move review and exact-body order/guards; completion outcomes in reload harness are synthetic callback boundaries."
+    },
+    "companionRemove": {
+      "status": "PASS",
+      "assertions": 77,
+      "cases": 28,
+      "scope": "Actual Shell/controller/uGUI release/click bodies with queue/render/event boundary stubs, not physical input."
+    },
+    "counting": "Keep named suites separate. Prior regression matrices and independent reruns are intentionally not summed into a unique-coverage total."
+  },
+  "nativeGates": {
+    "installedPins": {
+      "status": "PASS",
+      "receipt": "install.json",
+      "writeCount": 14,
+      "allInstalledWritesMatchPlanAndFiles": true
+    },
+    "udonCompilationAndWiring": {
+      "status": "PASS",
+      "receipt": "udon.json",
+      "programCount": 121,
+      "outputs": 121,
+      "missing": 0,
+      "queuePressHelpers": 8,
+      "pressWiringVerifiedBy": "final.json"
+    },
+    "autoSelection": {
+      "status": "PASS",
+      "receipt": "native-auto.json",
+      "checks": 48,
+      "cases": 12,
+      "loadingBoundarySeeded": true,
+      "networkOrDecoderInvoked": false
+    },
+    "retainedRemoveButtons": {
+      "status": "PASS",
+      "receipt": "shell/native-press.json",
+      "checks": 58,
+      "cases": 12,
+      "pointerRaycastAndQueueWireInputsSeeded": true,
+      "actualUnityFramesDuringHelper": false,
+      "physicalVrInput": false,
+      "actualNetworkRoleRevoke": false
+    },
+    "queueWireAndStaleStop": {
+      "status": "PASS",
+      "receipt": "native-queue-wire-stop.json",
+      "checks": 190,
+      "enqueues": 30,
+      "stops": 2,
+      "seededWireTransfer": true,
+      "eofEntryInvokedExplicitly": true,
+      "terminalCoreBoundarySeeded": true,
+      "actualSdkOnVideoError": false,
+      "nativeMediaReadyClaim": false
+    },
+    "sameImageCachedReceive": {
+      "status": "PASS",
+      "receipt": "native-cached-image.json",
+      "checks": 97,
+      "realFrames": 27,
+      "elapsedSeconds": 0.48938369999814313,
+      "enqueues": 1,
+      "stops": 1,
+      "actualSdkCompletion": true,
+      "sdkCallbackSeeded": false,
+      "logicalSnapshotDeliverySeeded": true,
+      "receivedState": "PLAYING2",
+      "duplicateUuidControl": true,
+      "pausedNativeClaim": false,
+      "ownerHandoff": false,
+      "httpCorroboration": "http-events.jsonl"
+    },
+    "freshStaleProgramAdoption": {
+      "status": "PASS",
+      "receipt": "fresh-adoption.json",
+      "forcedStaleBranch": true,
+      "sameHelperInstances": true,
+      "helpers": 8,
+      "compilerSynchronous": true,
+      "sourceUnchanged": true
+    },
+    "visualCapture": {
+      "status": "PASS",
+      "receipt": "native-captures.json",
+      "captures": 6,
+      "remotes": 2,
+      "languages": [
+        "ru",
+        "en",
+        "ja"
+      ],
+      "contactSheet": "captures/visual-review.png",
+      "visualReview": "Root agent reported viewing the six captures through the contact sheet; metadata preparer did not re-render them."
+    },
+    "sceneAndEditorRestoration": {
+      "status": "PASS",
+      "receipts": [
+        "play-native/restoration.json",
+        "play-native/scene-restoration.json",
+        "ui-release.json",
+        "final.json"
+      ],
+      "materials": 1471,
+      "completeLightVolumeTables": 120,
+      "globals": 6,
+      "authoringBlocksCompared": 24503,
+      "noAddedOrRemovedObjects": true,
+      "originalSceneWritten": false,
+      "dirtySceneRetained": true,
+      "transforms": 6152,
+      "missingScripts": 0,
+      "uiSuspensionRestored": true,
+      "ownedImportLock": false
+    },
+    "finalSourcePins": {
+      "status": "PASS",
+      "receipt": "final.json",
+      "installedSourcesMatch": true,
+      "sourceOverlayUnchanged": true,
+      "unchangedClockVerified": true
+    }
+  },
+  "boundaries": {
+    "native": "PASS within the explicit seeded boundaries recorded for each gate. This is PC-compiled ClientSim/SDK qualification, not physical Quest or Photon acceptance.",
+    "remainingClientAcceptance": [
+      "Two VRChat clients / Photon delivery and owner handoff",
+      "Physical Quest",
+      "AVPro",
+      "HMD"
+    ],
+    "inheritedCinema7": "Historical image-lifetime/global-texture qualification remains in qualification.cinema.7.json; current selector edits do not modify image-lifetime bodies. Do not recast historical SDK/frame counts as a fresh cinema.8 run.",
+    "cacheNativePlan": "Observed real installed SDK HTTP completion, then explicitly seeded coherent PLAYING new UUID/duplicate receive; local Core/frontend owner. Native PAUSED, Photon delivery and owner handoff are not claimed.",
+    "queueNativePlan": "Observed actual compiled Enqueue/Next/Stop and serializer/decoder events; field delivery, EOF dispatch and terminal Core boundary explicitly seeded.",
+    "removeNativePlan": "Observed actual retained EventTrigger/Button/Submit into compiled Udon with explicitly seeded pointer/queue data; no physical HMD/raycast or real grant-revocation claim."
+  },
+  "evidence": {
+    "canonicalTask": "Uran Fracture Cinema/Concept/video_post_cinema8_fix_20261113",
+    "inputs": [
+      "package-plan.json",
+      "install.json",
+      "csharp-final/report.json",
+      "udon.json",
+      "native-init.json",
+      "native-auto.json",
+      "native-queue-wire-stop.json",
+      "shell/native-press.json",
+      "native-cached-image.json",
+      "fresh-adoption.json",
+      "native-captures.json",
+      "play-native/restoration.json",
+      "play-native/scene-restoration.json",
+      "ui-release.json",
+      "final.json",
+      "http-events.jsonl",
+      "preinstall-seal.json",
+      "csharp-candidate/report.json",
+      "queue/qualification.json",
+      "queue/source-seal.json",
+      "selectors/report.json",
+      "selectors/source-seal.json",
+      "core/source-seal.json",
+      "selectors/core-review/reload-review.json",
+      "shell/QueueRemovePress-report-v2.json",
+      "shell/candidate-manifest-v2.json"
+    ],
+    "inputSha256": {
+      "package-plan.json": "7f64c4b26641062a4768264bbe499c51bb3023ffc8d263b6c96858f762942c5e",
+      "install.json": "e0e6bed9b48a9879419f6df0c5a822dca01204e94ac9e957641d150a3fa3bb7c",
+      "csharp-final/report.json": "8e0533eb572335707ad19fc8d44addc7defc7331092236c29cc94a230811f946",
+      "udon.json": "700fb605d10210adbc9159335d9a2918c3d1ecdbe5914b6fac809a4c344bd482",
+      "native-init.json": "9963e53626ad923d889ea861345826a077f9c3f6430402ce6fd4183e353dd91a",
+      "native-auto.json": "b05b2eb050b7173985459bab5a2f9be3d8d0fb9c4801e37275c0fd79536303ea",
+      "native-queue-wire-stop.json": "9ab5a5c7cf28fdfcdb4c165454691370f34bb8f01dc95431e1b99369ea1b91c5",
+      "shell/native-press.json": "0a23087a1becff4e4504aca6a12e8ef113ac4831dde6f7f179d85c7d786ac405",
+      "native-cached-image.json": "c405ae7882bfc0efcf4086df9d894674666ba1d2bd12e24e0332271b54c731dd",
+      "fresh-adoption.json": "f81b3ff49920fb036d97f150f4f9af2b4ab1f10d00e9e24d9311c75aae0db3d0",
+      "native-captures.json": "31221711d1a5a982005bb465e6b5084ee4d9599cb650cf719a84a5ac769cd226",
+      "play-native/restoration.json": "859515de9cc4551b380f5c74c1a6475fa0a8795b9d356e145095d23429b88d20",
+      "play-native/scene-restoration.json": "5bb8b53c19a0a4d8d81e1c1ac6919038d05b05a353b58b5b9a46aaf81b4a6d03",
+      "ui-release.json": "91b38038031667b917b254f2dd4cee8db135bc054f5aeb6f816f4b059bcd59da",
+      "final.json": "ea88601372e261f5c80dbe8939632b4c099ab82c264fa12040b396f0adf0e674",
+      "http-events.jsonl": "e3359399a56cc33ae4b0c5c0857fe1809faef1e6cecddfb252595b0cda348b77",
+      "preinstall-seal.json": "237ee7767ca0b34a44ba684b8d07a0afbba70155158a56f9efab822d5e76ff42",
+      "csharp-candidate/report.json": "40f01273cd2b954e4942595c51cd1e46542de6e9cc6c719a0386ee3e79988fa9",
+      "queue/qualification.json": "84abdc636a69c512b6e83f0b792ba4b07a2fbd7b1e9462f895688db4a699ab3e",
+      "queue/source-seal.json": "c4a3e0f334b1979ec60d07daafef09fc09c52d492dc74370d33bbc3599eb892c",
+      "selectors/report.json": "c890c9c6e627f81b3b9e939bd8e69af6ceba97fc788d8eb59a7e440cd569b19a",
+      "selectors/source-seal.json": "56c49595221648e07f2b068b2f73c2127fdfb69ee6a064ed83a7cc66afa94a54",
+      "core/source-seal.json": "19382b40f853e97baee7dce4d3497254893726ee19138e6543f06e0d18df5228",
+      "selectors/core-review/reload-review.json": "c3e6bd6a1a6adff488cbabea68acf9fd7ce6aa62b38d49fe6aa60e48a174bcef",
+      "shell/QueueRemovePress-report-v2.json": "fbdd78c8597da5914f1048442556ff61708b785cb1a9035c2b7679ab20fc4c6d",
+      "shell/candidate-manifest-v2.json": "1e7036cdedb9c1ae36f8c79ed9e14e22b908e3338e77c2f0ab79dc611e555bc9"
+    },
+    "captureSha256": {
+      "captures/CinemaEightQueue_0_ru.png": "6ccb3fc5644d93f95bf7883c420794a3e781816a3b974a489b3f35764831b40c",
+      "captures/CinemaEightQueue_0_en.png": "790c706747761cfb9f900d0441c403b9600cc7d7453bcb37ab7ce6e226ec32da",
+      "captures/CinemaEightQueue_0_ja.png": "b3fbbfdef18bf5fcb8594fe0a179484a0613c01bb812606d793ca2a6af34912e",
+      "captures/CinemaEightQueue_1_ru.png": "c8aaa5c34b468d8dfd1857d443476d718a69a0e1335263772b909680e6ee280d",
+      "captures/CinemaEightQueue_1_en.png": "a95f8fd468629e67890071501ece6e3608416088ef23d7b51a293ee6ac078e14",
+      "captures/CinemaEightQueue_1_ja.png": "de694de65e23890ab5e336191d1c8b0ac99112821c4d302dbf64ba45c7854175",
+      "captures/visual-review.png": "ab3262b3a0bc0ba33c13577bcd2ad7614cf28e954e0dea4a89fc2c57589e9374"
+    },
+    "excludedNoteSha256": "73820b484058ae54edf469be58d8db3b863666868360a5ce54a2d3447a55f9c7"
+  },
+  "promotion": {
+    "status": "PENDING_GIT_DELIVERY",
+    "proposedPaths": [
+      "Tests/CinemaQueueRegression/qualification.cinema.8.json",
+      "Tests/CinemaQueueRegression/README.cinema.8.md"
+    ],
+    "retainExistingQualification": true,
+    "publicVpmArchivePublished": false,
+    "vpmListingUpdated": false,
+    "worldUploaded": false,
+    "qualificationReady": true,
+    "gitCommitted": false,
+    "gitMerged": false,
+    "gitPushed": false
+  },
+  "sourcePins": {
+    "Runtime/VVMW/Core.cs": "264a8fe240d3265714d707232d951d4b76bf25109442083f2b66f975b4cce980",
+    "Runtime/VVMW/FrontendHandler.cs": "bbd67a9d9cb2caaae4c0945981c3138d67d243a89cb655b9c55b4c63b03dc6ac",
+    "Runtime/VVMW/FrontendHandler_QueueList.cs": "15157ea5d4a8d3e37a3b5d317f605c867db8aef56e5de0fe99953070d379ab4b",
+    "Runtime/VVMW/ImageViewerHandler.cs": "e86c19896ad82aa222dc19b16edb3cae5fe1759c68f8654b70b30908f9cb6fcf",
+    "Runtime/VVMW/VideoPlayerHandler.cs": "c1f250e93744fc4a104ec8061d3a9af2bbc6238c03f2f63bdd5a8ee22829ce7b",
+    "package.json": "d438dc2ab6b1679742d563ab4c8c319f40f5c91ab53bb8f1ce334de563947130"
+  },
+  "companionSourcePins": {
+    "Assets/UFC/Editor/UfcCinemaVideoQueuePress.cs": "52ee880dab4c28addc5990cc2cea13c234f8aea81f2ed826de10558767edc970",
+    "Assets/UFC/Editor/UfcCinemaVideoQueuePress.cs.meta": "41997a1677727db68e856824530e2e292f43d78de1dd8dca7d00df1863eeb17c",
+    "Assets/UFC/Editor/UfcCinemaVideoShell.cs": "9bd20c550bd6358e06405d4eb69015484b45322d331cd58977ac0ae8d8065d79",
+    "Assets/UFC/Editor/UfcCinemaVideoSpeed.cs": "89f2c1bfb46c91d21f56f56eaae7f7dea1e31ed02def9005962a59324f39106d",
+    "Assets/UFC/Udon/UfcVideoQueuePress.cs": "49b213db56b4a688eea0a87d4baf4a6d575dea5a8531cb564b2198e9d7490582",
+    "Assets/UFC/Udon/UfcVideoQueuePress.cs.meta": "e366263c15ab9010137125878a7543d1db1226f14a3ac99fa406ef5cbe091484",
+    "Assets/UFC/Udon/UfcVideoShell.cs": "2eb97ec0c33e5c49984b5a7560c15b1249d0ecc673ddaff91123c85093d82635"
+  },
+  "excludedFromFinalAcceptance": [
+    {
+      "receipt": "revisions/native-auto-before-init.json",
+      "note": "revisions/native-auto-before-init-note.json",
+      "reason": "Initialization initially returned WAIT; the independent Auto probe ran before its required saved-session isolation receipt. Rerun only after confirmed native-init PASS.",
+      "countedAssertions": 0,
+      "productFailure": false
+    }
+  ]
+}

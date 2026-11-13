@@ -387,6 +387,8 @@ namespace JLChnToZ.VRC.VVMW {
         public
 #endif
         void _OnVideoBeginLoad() {
+            // A new load supersedes a Stop whose idle Core had no End callback.
+            forceStop = false;
             RestoreReceivedQueueOriginForUfc();
             UpdateState();
         }
@@ -411,6 +413,14 @@ namespace JLChnToZ.VRC.VVMW {
 #endif
         void _OnScreenSharedPropertiesChanged() => SendEvent("_OnScreenSharedPropertiesChanged");
 
+        string SerializeTitlesForUfc(string[] titles) {
+            if (!Utilities.IsValid(titles)) return "";
+            // Restored queues and playlist/history metadata can bypass PlayUrl. Keep the legacy delimiter structural.
+            for (int i = 0; i < titles.Length; i++)
+                if (!string.IsNullOrEmpty(titles[i])) titles[i] = titles[i].Replace('\u2029', '\n');
+            return string.Join("\u2029", titles);
+        }
+
         /// <inheritdoc cref="Core.OnPreSerialization" />
         public override void OnPreSerialization() {
             if (!synced) return;
@@ -418,11 +428,11 @@ namespace JLChnToZ.VRC.VVMW {
             queuedQuestUrls = !Utilities.IsValid(localQueuedQuestUrls) ? new VRCUrl[0] : localQueuedQuestUrls;
             queuedPlayerIndex = !Utilities.IsValid(localQueuedPlayerIndex) ? new byte[0] : localQueuedPlayerIndex;
             playListOrder = !Utilities.IsValid(localPlayListOrder) ? new ushort[0] : localPlayListOrder;
-            queuedTitles = !Utilities.IsValid(localQueuedTitles) ? "" : string.Join("\u2029", localQueuedTitles);
+            queuedTitles = SerializeTitlesForUfc(localQueuedTitles);
             historyUrls = !Utilities.IsValid(localHistoryUrls) ? new VRCUrl[0] : localHistoryUrls;
             historyQuestUrls = !Utilities.IsValid(localHistoryQuestUrls) ? new VRCUrl[0] : localHistoryQuestUrls;
             historyPlayerIndex = !Utilities.IsValid(localHistoryPlayerIndex) ? new byte[0] : localHistoryPlayerIndex;
-            historyTitles = !Utilities.IsValid(localHistoryTitles) ? "" : string.Join("\u2029", localHistoryTitles);
+            historyTitles = SerializeTitlesForUfc(localHistoryTitles);
             currentTitle = localCurrentTitle;
             flags = localFlags;
             queuePlaybackIdForUfc = CanRotateCurrentQueuePlaybackForUfc() ? localQueuePlaybackIdForUfc : "";
