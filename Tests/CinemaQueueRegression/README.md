@@ -1,5 +1,9 @@
 # Cinema queue lifecycle regression qualification
 
+For Cinema.8 receive, URL selection, queue and companion Remove fixes, see
+[README.cinema.8.md](README.cinema.8.md) and
+[qualification.cinema.8.json](qualification.cinema.8.json).
+
 For the Cinema.7 queue and bounded image-lifetime follow-up, see
 [README.cinema.7.md](README.cinema.7.md) and
 [qualification.cinema.7.json](qualification.cinema.7.json). The Cinema.6 record

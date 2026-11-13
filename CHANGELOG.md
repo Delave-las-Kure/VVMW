@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## 1.8.3-cinema.8 - Unreleased
+### Fixed
+- Enter Loading before invoking receive/reload backends, so synchronous cached
+  image readiness or terminal errors settle the load instead of stranding controls.
+- Bound HTTP authority parsing before query and fragment text, preventing valid
+  no-path URLs with redirect queries from throwing during automatic selection.
+- Stop extension scoring at the earliest query or fragment delimiter, preserving
+  signed image routing and preventing query text from disguising media extensions.
+- Clear a superseded Stop intent on a new accepted BeginLoad, allowing its first
+  terminal error to advance the waiting queue before any Ready callback.
+- Normalize paragraph separators in display titles before existing queue/history
+  serialization, keeping URL/backend/title rows aligned for decoded and imported titles.
+
 ## 1.8.3-cinema.7 - Unreleased
 ### Fixed
 - Backfill earlier PC-only queue rows when the optional mobile URL array is first
