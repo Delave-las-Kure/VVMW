@@ -655,18 +655,21 @@ namespace JLChnToZ.VRC.VVMW {
         internal protected
 #endif
         override int IsSupported(string urlStr) {
+            if (string.IsNullOrEmpty(urlStr)) return -1;
             if (!urlStr.StartsWith("http", StringComparison.OrdinalIgnoreCase))
                 return isAvPro && IsRealTimeProtocolS(urlStr) ? isLowLatency ? 2 : 1 : -1;
             int index = urlStr.IndexOf("://");
             if (index < 0) return -1;
             urlStr = urlStr.Substring(index + 3);
+            index = urlStr.IndexOf('#');
+            if (index < 0) index = urlStr.Length;
+            int queryIndex = urlStr.IndexOf('?');
+            if (queryIndex >= 0 && queryIndex < index) index = queryIndex;
+            urlStr = urlStr.Substring(0, index);
+            if (urlStr.Length == 0) return -1;
             index = urlStr.IndexOf('/');
             var domain = index < 0 ? urlStr : urlStr.Substring(0, index);
-            index = urlStr.IndexOf('#');
-            if (index < 0) {
-                index = urlStr.IndexOf('?');
-                if (index < 0) index = urlStr.Length;
-            }
+            index = urlStr.Length;
             int domainLength = domain.Length;
             if (domain.EndsWith("youtube.com", StringComparison.OrdinalIgnoreCase)) {
                 if (urlStr.IndexOf("/live", domainLength, index - domainLength, StringComparison.OrdinalIgnoreCase) >= 0)
