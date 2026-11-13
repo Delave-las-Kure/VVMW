@@ -671,16 +671,16 @@ namespace JLChnToZ.VRC.VVMW {
             var domain = index < 0 ? urlStr : urlStr.Substring(0, index);
             index = urlStr.Length;
             int domainLength = domain.Length;
-            if (domain.EndsWith("youtube.com", StringComparison.OrdinalIgnoreCase)) {
+            if (domain.Equals("youtube.com", StringComparison.OrdinalIgnoreCase) || domain.EndsWith(".youtube.com", StringComparison.OrdinalIgnoreCase)) {
                 if (urlStr.IndexOf("/live", domainLength, index - domainLength, StringComparison.OrdinalIgnoreCase) >= 0)
                     return isAvPro ? isLowLatency ? 2 : 1 : -1;
                 return 1;
             }
-            if (domain.EndsWith("youtu.be", StringComparison.OrdinalIgnoreCase))
+            if (domain.Equals("youtu.be", StringComparison.OrdinalIgnoreCase) || domain.EndsWith(".youtu.be", StringComparison.OrdinalIgnoreCase))
                 return 0;
-            if (domain.EndsWith("twitch.tv", StringComparison.OrdinalIgnoreCase))
+            if (domain.Equals("twitch.tv", StringComparison.OrdinalIgnoreCase) || domain.EndsWith(".twitch.tv", StringComparison.OrdinalIgnoreCase))
                 return isAvPro ? 1 : 0;
-            if (domain.EndsWith("soundcloud.com", StringComparison.OrdinalIgnoreCase))
+            if (domain.Equals("soundcloud.com", StringComparison.OrdinalIgnoreCase) || domain.EndsWith(".soundcloud.com", StringComparison.OrdinalIgnoreCase))
                 return isAvPro ? 1 : -1;
             index = urlStr.LastIndexOf('.', index - 1);
             if (index < 0) return 0;

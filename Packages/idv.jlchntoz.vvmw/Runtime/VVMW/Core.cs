@@ -380,8 +380,14 @@ namespace JLChnToZ.VRC.VVMW {
                 return;
             }
             PrepareMappedInitialLoadForUfc();
+            // Establish ownership/Loading before a cache can synchronously report Ready/Play.
+            if (synced) {
+                state = LOADING;
+                if (!Networking.IsOwner(gameObject)) Networking.SetOwner(Networking.LocalPlayer, gameObject);
+            }
             activeHandler.LoadUrl(url, false);
-            if (RequestSync()) state = LOADING;
+            // Serialize only after the loader's synchronous callbacks have settled.
+            RequestSync();
             LoadYTTL();
         }
 
@@ -1000,6 +1006,8 @@ namespace JLChnToZ.VRC.VVMW {
             }
             if (shouldReload) {
                 CancelRetryReloadForUfc();
+                // A fresh launch retries its configured backend even after a local fallback.
+                ActivePlayer = activePlayer;
                 if (!Utilities.IsValid(activeHandler)) {
                     AcceptSharedPlaybackSnapshotForUfc();
                     Debug.LogWarning($"[VVMW] Owner serialization incomplete, will queue a sync request.");
