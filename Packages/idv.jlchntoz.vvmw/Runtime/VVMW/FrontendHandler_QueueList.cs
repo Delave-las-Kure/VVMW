@@ -96,7 +96,8 @@ namespace JLChnToZ.VRC.VVMW {
             }
             if (VRCUrl.IsNullOrEmpty(pcUrl)) return;
             if (VRCUrl.IsNullOrEmpty(questUrl)) questUrl = pcUrl;
-            if (localPlayListIndex > 0) {
+            bool wasPlayList = localPlayListIndex > 0;
+            if (wasPlayList) {
                 localPlayListIndex = 0;
                 localQueuedUrls = null;
                 localQueuedQuestUrls = null;
@@ -110,7 +111,7 @@ namespace JLChnToZ.VRC.VVMW {
                 queuedTitle = $"\u200B{Networking.LocalPlayer.displayName}:\n{queuedTitle}";
             // U+2029 is the legacy wire delimiter for queue/history titles. Keep the paragraph as a newline.
             queuedTitle = queuedTitle.Replace('\u2029', '\n');
-            if (enableQueueList) {
+            if (enableQueueList && !wasPlayList) {
                 bool isQueueEmpty = IsArrayNullOrEmpty(localQueuedUrls);
                 if (core.IsReady || core.IsLoading || core.IsLocalTransportActiveForUfc || !isQueueEmpty) {
                     if (isQueueEmpty) {
