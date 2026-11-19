@@ -334,19 +334,7 @@ namespace JLChnToZ.VRC.VVMW {
                 compatibilityToggle.interactable = false;
                 compatibilityToggle.gameObject.SetActive(false);
             }
-            bool availableSlot = false;
-            for (int i = 0; i < 2; i++) {
-                bool visible = expandedMirrors[i] || (Fields() && !VRCUrl.IsNullOrEmpty(mirrorInputs[i].GetUrl()));
-                if (!visible) availableSlot = true;
-                if (mirrorRows != null && i < mirrorRows.Length && Utilities.IsValid(mirrorRows[i])) mirrorRows[i].SetActive(visible);
-                if (removeMirrorButtons != null && i < removeMirrorButtons.Length && Utilities.IsValid(removeMirrorButtons[i]))
-                    removeMirrorButtons[i].interactable = editable && !pending;
-            }
-            if (Utilities.IsValid(addMirrorButton)) {
-                addMirrorButton.gameObject.SetActive(editable);
-                addMirrorButton.interactable = !pending && availableSlot;
-            }
-            Put(addMirrorText, Tr(availableSlot ? "AddMirror" : "MirrorLimit"));
+            RefreshMirrorRows(editable && !pending);
             if (nameCaptions != null) for (int i = 0; i < nameCaptions.Length; i++) Put(nameCaptions[i], (i == 0 ? Tr("PrimaryName") : Tr(i == 1 ? "Mirror1" : "Mirror2") + " · " + Tr("Name")));
             if (urlCaptions != null) for (int i = 0; i < urlCaptions.Length; i++) Put(urlCaptions[i], Tr("MirrorUrl"));
             if (Fields()) {
@@ -361,6 +349,22 @@ namespace JLChnToZ.VRC.VVMW {
                 reloadButton.gameObject.SetActive(bound && graph && (Authorized() || HasLocalEdits || !string.IsNullOrEmpty(request)));
                 reloadButton.interactable = graph && !pending;
             }
+        }
+        void RefreshMirrorRows(bool canEdit) {
+            bool availableSlot = false;
+            for (int i = 0; i < 2; i++) {
+                bool visible = expandedMirrors[i] || (Fields() && !VRCUrl.IsNullOrEmpty(mirrorInputs[i].GetUrl()));
+                if (!visible) availableSlot = true;
+                if (mirrorRows != null && i < mirrorRows.Length && Utilities.IsValid(mirrorRows[i])) mirrorRows[i].SetActive(visible);
+                if (removeMirrorButtons != null && i < removeMirrorButtons.Length && Utilities.IsValid(removeMirrorButtons[i]))
+                    removeMirrorButtons[i].interactable = canEdit;
+            }
+            if (Utilities.IsValid(addMirrorButton)) {
+                bool canAdd = canEdit && availableSlot;
+                addMirrorButton.interactable = canAdd;
+                addMirrorButton.gameObject.SetActive(canAdd);
+            }
+            Put(addMirrorText, Tr("AddMirror"));
         }
         void Put(Graphic target, string value) {
             if (!Utilities.IsValid(target)) return;
@@ -385,7 +389,6 @@ namespace JLChnToZ.VRC.VVMW {
                 case "DiscardFirst": return L("Your draft is kept. Press Discard changes to replace it.", "Черновик сохранён. Для сброса нажмите «Сбросить правки».", "下書きは保持されています。「変更を破棄」で再取得します。");
                 case "DraftPrimaryUrl": return L("Draft for this primary URL", "Черновик для основного URL", "下書きのメインURL");
                 case "AddMirror": return L("Add mirror", "Добавить зеркало", "ミラーを追加");
-                case "MirrorLimit": return L("2 mirrors added", "Добавлено 2 зеркала", "ミラーは2件まで");
                 case "Name": return L("name", "название", "名前");
                 case "Invalid1": return L("Mirror 1: enter a full video URL.", "Зеркало 1: укажите полный адрес видео.", "ミラー1：動画の完全なURLを入力してください。");
                 case "Invalid2": return L("Mirror 2: enter a full video URL.", "Зеркало 2: укажите полный адрес видео.", "ミラー2：動画の完全なURLを入力してください。");
