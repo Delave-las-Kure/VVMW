@@ -5,10 +5,13 @@ using UnityEditor.Events;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using UdonSharp;
 using UdonSharpEditor;
 using VRC.SDK3.Components;
+using VRC.SDKBase.Editor.BuildPipeline;
+using UnityEngine.SceneManagement;
 using JLChnToZ.VRC.Foundation.I18N;
 using static JLChnToZ.VRC.VVMW.Editors.SourceMirrorUIAuthoring;
 
@@ -22,6 +25,62 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             Need(backing, "Catalog UI backing is missing.");
             button.onClick = new Button.ButtonClickedEvent();
             UnityEventTools.AddStringPersistentListener(button.onClick, backing.SendCustomEvent, method);
+        }
+        // Also upgrades an existing scene button without replacing its onClick,
+        // sound listeners, selection navigation, or unrelated EventTrigger entries.
+        public static void BindSaveGesture(SourceMirrorCatalogUI view) {
+            Need(view && view.applyButton && !EditorApplication.isPlayingOrWillChangePlaymode, "Choose an existing catalog Save button in Edit Mode.");
+            var backing = UdonSharpEditorUtility.GetBackingUdonBehaviour(view);
+            Need(backing, "Catalog UI backing is missing.");
+            BindGesture(view.applyButton, backing, EventTriggerType.PointerDown, nameof(SourceMirrorCatalogUI._PressApply));
+            BindGesture(view.applyButton, backing, EventTriggerType.Submit, nameof(SourceMirrorCatalogUI._SubmitApply));
+            BindAddAndReloadGestures(view, true);
+            if (view.removeMirrorButtons == null) return;
+            for (int i = 0; i < view.removeMirrorButtons.Length && i < 2; i++) {
+                var button = view.removeMirrorButtons[i];
+                if (!button) continue;
+                BindGesture(button, backing, EventTriggerType.PointerDown,
+                    i == 0 ? nameof(SourceMirrorCatalogUI._PressRemoveMirror0) : nameof(SourceMirrorCatalogUI._PressRemoveMirror1));
+                BindGesture(button, backing, EventTriggerType.Submit,
+                    i == 0 ? nameof(SourceMirrorCatalogUI._SubmitRemoveMirror0) : nameof(SourceMirrorCatalogUI._SubmitRemoveMirror1));
+            }
+        }
+        internal static void BindAddAndReloadGestures(SourceMirrorCatalogUI view, bool recordUndo) {
+            if (!view.reloadButton && !view.addMirrorButton) return;
+            var backing = UdonSharpEditorUtility.GetBackingUdonBehaviour(view);
+            Need(backing, "Catalog UI backing is missing.");
+            if (view.reloadButton) {
+                BindGesture(view.reloadButton, backing, EventTriggerType.PointerDown, nameof(SourceMirrorCatalogUI._PressReload), recordUndo);
+                BindGesture(view.reloadButton, backing, EventTriggerType.Submit, nameof(SourceMirrorCatalogUI._SubmitReload), recordUndo);
+            }
+            if (view.addMirrorButton) {
+                BindGesture(view.addMirrorButton, backing, EventTriggerType.PointerDown, nameof(SourceMirrorCatalogUI._PressAddMirror), recordUndo);
+                BindGesture(view.addMirrorButton, backing, EventTriggerType.Submit, nameof(SourceMirrorCatalogUI._SubmitAddMirror), recordUndo);
+            }
+        }
+        internal static void BindGesture(Button button, global::VRC.Udon.UdonBehaviour backing, EventTriggerType type, string method, bool recordUndo = true) {
+            var trigger = button.GetComponent<EventTrigger>();
+            if (!trigger) trigger = recordUndo ? Undo.AddComponent<EventTrigger>(button.gameObject) : button.gameObject.AddComponent<EventTrigger>();
+            var entries = new SerializedObject(trigger).FindProperty("m_Delegates");
+            for (int i = 0; i < entries.arraySize; i++) {
+                var entry = entries.GetArrayElementAtIndex(i);
+                if (entry.FindPropertyRelative("eventID").intValue != (int)type) continue;
+                var calls = entry.FindPropertyRelative("callback.m_PersistentCalls.m_Calls");
+                for (int j = 0; j < calls.arraySize; j++) {
+                    var call = calls.GetArrayElementAtIndex(j);
+                    if (call.FindPropertyRelative("m_Target").objectReferenceValue == backing &&
+                        call.FindPropertyRelative("m_MethodName").stringValue == nameof(backing.SendCustomEvent) &&
+                        call.FindPropertyRelative("m_Arguments.m_StringArgument").stringValue == method) return;
+                }
+            }
+            if (recordUndo) Undo.RecordObject(trigger, "Bind source button gesture");
+            var listener = new EventTrigger.Entry { eventID = type };
+            UnityEventTools.AddStringPersistentListener(listener.callback, backing.SendCustomEvent, method);
+            trigger.triggers.Add(listener);
+            if (recordUndo) {
+                EditorUtility.SetDirty(trigger);
+                PrefabUtility.RecordPrefabInstancePropertyModifications(trigger);
+            }
         }
         static RectTransform Vertical(string name, Transform parent) {
             var rect = Rect(name, parent);
@@ -136,6 +195,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             var close = Button("Close", footer, buttonTemplate, textTemplate, TargetHeight, "Close", out view.closeText, out marker); marker.SetActive(false);
             view.panel = popup.gameObject;
             Wire(view.entryButton, view, nameof(SourceMirrorCatalogUI._Open)); Wire(view.applyButton, view, nameof(SourceMirrorCatalogUI._Apply));
+            BindSaveGesture(view);
             Wire(view.reloadButton, view, nameof(SourceMirrorCatalogUI._Reload)); Wire(close, view, nameof(SourceMirrorCatalogUI._Close));
             popup.gameObject.SetActive(false); UdonSharpEditorUtility.CopyProxyToUdon(view); return view;
         }
@@ -156,12 +216,29 @@ namespace JLChnToZ.VRC.VVMW.Editors {
                 "Catalog controls must inherit the world Canvas layer.");
         }
     }
-    sealed class SourceMirrorCatalogUIBuildValidator : IProcessSceneWithReport {
+    sealed class SourceMirrorCatalogUIBuildValidator : IProcessSceneWithReport, IVRCSDKBuildRequestedCallback {
         public int callbackOrder => -9100;
-        public void OnProcessScene(UnityEngine.SceneManagement.Scene scene, BuildReport report) {
-            foreach (var root in scene.GetRootGameObjects())
-                foreach (var view in root.GetComponentsInChildren<SourceMirrorCatalogUI>(true)) SourceMirrorCatalogUIAuthoring.Validate(view);
+
+        public bool OnBuildRequested(VRCSDKRequestedBuildType type) {
+            if (type == VRCSDKRequestedBuildType.Scene) {
+                // The VRChat SDK can strip UdonSharp proxies before Unity processes the bundle scene.
+                foreach (var view in CatalogViews(SceneManager.GetActiveScene()))
+                    SourceMirrorCatalogUIAuthoring.BindAddAndReloadGestures(view, true);
+            }
+            return true;
         }
+
+        public bool OnBuildRequested(VRCSDKRequestedBuildType type, BuildTarget target) => OnBuildRequested(type);
+
+        public void OnProcessScene(Scene scene, BuildReport report) {
+            foreach (var view in CatalogViews(scene)) {
+                SourceMirrorCatalogUIAuthoring.Validate(view);
+                SourceMirrorCatalogUIAuthoring.BindAddAndReloadGestures(view, false);
+            }
+        }
+
+        static System.Collections.Generic.IEnumerable<SourceMirrorCatalogUI> CatalogViews(Scene scene) =>
+            scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<SourceMirrorCatalogUI>(true));
     }
     sealed class SourceMirrorCatalogUIWizard : ScriptableWizard {
         public RectTransform parent;

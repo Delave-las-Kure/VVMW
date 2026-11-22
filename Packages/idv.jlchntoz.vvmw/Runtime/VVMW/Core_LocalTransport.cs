@@ -271,25 +271,26 @@ namespace JLChnToZ.VRC.VVMW {
                 VRCUrl.IsNullOrEmpty(canonicalUrl) || !canonicalUrl.Equals(localUrl) || state == IDLE) return 0;
             VRCUrl wanted = VRCUrl.IsNullOrEmpty(physicalUrl) ? canonicalUrl : physicalUrl;
             if (video.IsSupported(wanted.Get()) < 0) return 0;
-            SetPreferredLocalTransportUrlForUfc(canonicalUrl, physicalUrl);
-            // Keep an already issued, unprepared load of this exact source. Off must
-            // not stop and reopen the primary URL while its first Ready is pending.
-            // Prepared/aligned and queued replacements retain their existing paths.
-            if (!isError && isLoading && localTransportActiveForUfc && localTransportRouteManagedForUfc &&
-                HasLocalTransportIdentityForUfc() && !localTransportReadyForUfc &&
-                localTransportAlignedRevisionForUfc == -1 && !localTransportSeekPendingForUfc &&
+            // Both an issued load and its prepared decoder can still be waiting for
+            // presentation. Require the handler's receipt for this exact generation.
+            int generation;
+            bool waitingForReady = isLoading && !video.IsReady && !localTransportReadyForUfc &&
+                localTransportAlignedRevisionForUfc == -1 && !localTransportSeekPendingForUfc;
+            if (!isError && localTransportRouteManagedForUfc && HasLocalTransportIdentityForUfc() &&
+                (waitingForReady || (localTransportReadyForUfc && video.IsReady)) &&
                 video.CanContinueLocalTransportLoadForUfc(localTransportGenerationForUfc, canonicalUrl, wanted)) {
-                localTransportRequestAcceptedForUfc = true;
-                return localTransportGenerationForUfc;
-            }
-            if (!localTransportActiveForUfc && !isLoading && !isError && video.IsReady &&
+                generation = localTransportGenerationForUfc;
+            } else if (!localTransportActiveForUfc && !isLoading && !isError && video.IsReady &&
                 !VRCUrl.IsNullOrEmpty(video.LoadedPhysicalUrlForUfc) && video.LoadedPhysicalUrlForUfc.Equals(wanted)) {
-                localTransportRequestAcceptedForUfc = true;
                 // Prepared does not imply that the current presentation has been accepted.
-                return localTransportPresentationPendingForUfc ? localTransportGenerationForUfc : 0;
+                generation = localTransportPresentationPendingForUfc ? localTransportGenerationForUfc : 0;
+            } else {
+                generation = ReloadManagedTransportForUfc(video, canonicalUrl, physicalUrl);
+                localTransportRequestAcceptedForUfc = generation > 0;
+                return generation;
             }
-            int generation = ReloadManagedTransportForUfc(video);
-            localTransportRequestAcceptedForUfc = generation > 0;
+            SetPreferredLocalTransportUrlForUfc(canonicalUrl, physicalUrl);
+            localTransportRequestAcceptedForUfc = true;
             return generation;
         }
 
@@ -314,7 +315,7 @@ namespace JLChnToZ.VRC.VVMW {
             return true;
         }
 
-        int ReloadManagedTransportForUfc(VideoPlayerHandler video) {
+        int ReloadManagedTransportForUfc(VideoPlayerHandler video, VRCUrl selectedCanonical = null, VRCUrl selectedPhysical = null) {
             if (!localTransportActiveForUfc) {
                 if (state == LOADING) { if (!BeginInitialTransportForUfc()) return 0; }
                 else if (BeginLocalTransportForUfc() == 0) return 0;
@@ -324,6 +325,8 @@ namespace JLChnToZ.VRC.VVMW {
                 localTransportReadyForUfc = false;
                 localTransportAlignedRevisionForUfc = -1;
             }
+            // Only an admitted selection may change the URL used by this and future loads.
+            if (!VRCUrl.IsNullOrEmpty(selectedCanonical)) SetPreferredLocalTransportUrlForUfc(selectedCanonical, selectedPhysical);
             // A failed initial source relinquishes first-ready authority. A new explicit
             // load may reclaim it only while the room still awaits its first ready.
             localTransportInitialOpeningForUfc = state == LOADING;

@@ -146,34 +146,50 @@ namespace JLChnToZ.VRC.VVMW {
             SendCustomEventDelayedFrames(nameof(_Tick),1,EventTiming.LateUpdate);
         }
 
-        public void _SelectMirror() { disabling=false; Request(requestedPhysical); if(requestAccepted)StopAuto(); }
+        public void _SelectMirror() { Request(requestedPhysical); if(requestAccepted)StopAuto(); }
         public void _TurnOff() {
-            StopAuto();
             requestAccepted=false;
             if (!PresentationConfigured()) { diagnostic="Presentation wiring incomplete"; return; }
             if (!SameFilm() || core.SharedStateForUfc==0) {
+                StopAuto();
                 if (!VRCUrl.IsNullOrEmpty(canonical)) core.SetPreferredLocalTransportUrlForUfc(canonical,null);
                 core.RegisterLocalTransportPresenterForUfc(null);
                 disabling=false;pending=failed=false;mirrorsOff=true;Release();enabled=false;requestAccepted=true;
                 return;
             }
-            disabling=true;
-            Request(null);
+            Request(null, true);
         }
         public void _TurnOn() { disabling=false; mirrorsOff=false; enabled=true; if(observeCoreLoads)Attach(); }
 
-        void Request(VRCUrl physical) {
+        void Request(VRCUrl physical, bool turnOff = false) {
             requestAccepted=false;
             if (!enabled || !Configured() || !SameFilm()) { diagnostic="No matching current film or presentation wiring"; return; }
             if (!Register()) { diagnostic="Another presenter owns this transition";return; }
-            Hold();
-            generation=core.RequestLocalTransportUrlForUfc(canonical,physical);
+            bool wasHeld=held, hadPicture=picturePresented;
+            int continuingGeneration = pending && !failed && !turnOff && !hadPicture ? generation : 0;
+            // Leave an existing loading/error presentation in place while Core
+            // checks the replacement. A refusal must keep its audio gate too.
+            if (!wasHeld || hadPicture) Hold();
+            int requestedGeneration=core.RequestLocalTransportUrlForUfc(canonical,physical);
             if (!core.LocalTransportRequestAcceptedForUfc) {
-                if (!pending) { Release();DetachUnlessWatching(); }
+                if (wasHeld && hadPicture) Show();
+                if (!wasHeld) {
+                    // Auto can queue a choice while the previous stream is playing.
+                    // Undo only the temporary hold acquired by this refused request.
+                    Release(); picturePresented = hadPicture;
+                    if (!pending) DetachUnlessWatching();
+                }
                 diagnostic="Local source request rejected";return;
             }
+            generation=requestedGeneration;
+            // A refused handback still belongs to the previous mirror or Auto cycle.
+            // Set the mode before Finish for an already-ready primary (generation 0).
+            disabling = turnOff;
+            if (turnOff) StopAuto();
+            if (wasHeld && !hadPicture) Hold();
             requestAccepted=true;failed=false;mirrorsOff=false;lastAcceptedPhysical=physical;
             if (generation==0) { pending=false;Release();Finish();return; }
+            if (generation == continuingGeneration) return;
             startedAt=Time.realtimeSinceStartup;
             acceptedRevision=-1;stableSamples=phase=0;previousRaw=-1;alignments=0;
             pending=true;diagnostic="Loading selected source";Queue();

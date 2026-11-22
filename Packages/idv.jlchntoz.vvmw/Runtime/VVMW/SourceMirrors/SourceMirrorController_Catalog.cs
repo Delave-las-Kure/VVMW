@@ -11,11 +11,15 @@ namespace JLChnToZ.VRC.VVMW {
         byte selectedBackend;
         int selectionResult = SourceMirrorCatalog.NotContextReady;
         int catalogSelectionSerial;
+        bool selectionAwaitingContext;
 
-        public string SelectedSourceId => selectedSourceId;
-        public string SelectedCatalogVersion => selectedVersion;
-        public string SelectedPlaybackId => selectedPlaybackId;
+        public string SelectedSourceId => selectionAwaitingContext ? "" : selectedSourceId;
+        public string SelectedCatalogVersion => selectionAwaitingContext ? "" : selectedVersion;
+        public string SelectedPlaybackId => selectionAwaitingContext ? "" : selectedPlaybackId;
         public int SelectionResult => selectionResult;
+        // A Retry refers to one transport attempt in one mode, including automatic cycles.
+        public int RetryRevision => catalogSelectionSerial + autoCycleSerial +
+            (Utilities.IsValid(core) ? core.LocalTransportGenerationForUfc : 0);
 
         // Computed from an accepted selection AND the actual ready load receipt.
         // No Finish hook: generation==0 may complete inside Request, and Finish
@@ -26,8 +30,25 @@ namespace JLChnToZ.VRC.VVMW {
                     !picturePresented || !ReceiptMatchesContext() || !core.IsReady || core.SharedStateForUfc == 0)
                     return "";
                 var loaded = core.LocalTransportLoadedPhysicalUrlForUfc;
-                return !VRCUrl.IsNullOrEmpty(loaded) && loaded.Equals(selectedPhysical) ? selectedSourceId : "";
+                return sourceCatalog.SameSourceEndpoint(loaded, selectedPhysical) ? selectedSourceId : "";
             }
+        }
+
+        // Old shared snapshots can contain aliases or allocate a fresh ID to a
+        // spelling change. Prefer the viewer's ID, then the literal loaded URL.
+        public int FindListedEndpoint(VRCUrl physical, string preferredId) {
+            if (VRCUrl.IsNullOrEmpty(physical) || !Utilities.IsValid(sourceCatalog)) return -1;
+            int count = sourceCatalog.SourceCount, preferred = -1, exact = -1;
+            for (int i = 0; i < count; i++) {
+                if (physical.Equals(sourceCatalog.GetSourceUrl(i))) exact = i;
+                if (sourceCatalog.GetSourceId(i) == preferredId) preferred = i;
+            }
+            if (preferred >= 0 && sourceCatalog.SameSourceEndpoint(physical, sourceCatalog.GetSourceUrl(preferred)))
+                return preferred;
+            if (exact >= 0) return exact;
+            for (int i = 0; i < count; i++)
+                if (sourceCatalog.SameSourceEndpoint(physical, sourceCatalog.GetSourceUrl(i))) return i;
+            return -1;
         }
 
         bool ReceiptMatchesContext() => Utilities.IsValid(core) && Utilities.IsValid(sourceCatalog) &&
@@ -57,13 +78,33 @@ namespace JLChnToZ.VRC.VVMW {
                 canonical = core.Url;
                 if (enabled && !mirrorsOff && !disabling && observeCoreLoads && Configured()) Register();
             }
-            if (SelectedFilmMatchesContext()) {
-                if (Utilities.IsValid(sourceCatalog.authority) && sourceCatalog.IsCurrent)
-                    selectedPlaybackId = sourceCatalog.ContextPlaybackId;
+            // An unavailable Core header hides the selection while its mirror may still be playing.
+            // Only the original launch and film may reclaim it after a gap.
+            if (!sourceCatalog.HasLocalContext && Utilities.IsValid(sourceCatalog.authority) &&
+                sourceCatalog.authority.core == core && !string.IsNullOrEmpty(selectedSourceId)) {
+                selectionAwaitingContext = true;
                 return;
             }
+            if (SelectedFilmMatchesContext() && (!selectionAwaitingContext || selectedPlaybackId == sourceCatalog.ContextPlaybackId)) {
+                if (selectionAwaitingContext && !sourceCatalog.IsCurrent) return;
+                selectionAwaitingContext = false;
+                if (Utilities.IsValid(sourceCatalog.authority) && sourceCatalog.IsCurrent)
+                    selectedPlaybackId = sourceCatalog.ContextPlaybackId;
+                RebindSelectedEndpoint();
+                return;
+            }
+            selectionAwaitingContext = false;
             selectedSourceId = selectedFilmId = selectedPlaybackId = selectedVersion = "";
             selectedPhysical = selectedCanonical = selectedMobile = null; selectedBackend = 0;
+        }
+
+        void RebindSelectedEndpoint() {
+            if (!sourceCatalog.IsCurrent || selectedPlaybackId != sourceCatalog.ContextPlaybackId) return;
+            // An existing ID may intentionally point to a new URL on explicit retry.
+            for (int i = 0; i < sourceCatalog.SourceCount; i++)
+                if (sourceCatalog.GetSourceId(i) == selectedSourceId) return;
+            int replacement = FindListedEndpoint(selectedPhysical, selectedSourceId);
+            if (replacement >= 0) selectedSourceId = sourceCatalog.GetSourceId(replacement);
         }
 
         byte CatalogBackend() => Utilities.IsValid(sourceCatalog.authority) ? core.ConfiguredPlayerTypeForUfc : core.ActivePlayer;
@@ -104,19 +145,33 @@ namespace JLChnToZ.VRC.VVMW {
             if (!sourceCatalog.RegisterLocalSelectionObserver(this)) {
                 selectionResult = SourceMirrorCatalog.NotContextReady; return false;
             }
-            if (!enabled || mirrorsOff) {
-                // OnEnable may register metadata, but must not Attach/Adopt a
-                // primary load before the one choice below. Restore watching only
-                // after enabling; the existing selection/Auto path owns all media.
+            bool wasEnabled = enabled, wasOff = mirrorsOff, wasWatching = observeCoreLoads;
+            bool optIn = !wasEnabled || wasOff;
+            if (optIn) {
+                // Until the choice succeeds, register only for its own load.
+                // A refused request can detach without taking over stock playback.
                 observeCoreLoads = false;
                 if (!enabled) skipUiEnableAdoption = true;
                 skipUiStartAdoption = true;
                 canonical = sourceCatalog.ContextCanonical;
                 mirrorsOff = false; disabling = false; enabled = true;
-                observeCoreLoads = true;
+                requestAccepted = false;
             }
-            return automatic ? UseAuto(expectedCatalogVersion, expectedPlaybackId) :
+            bool accepted = automatic ? UseAuto(expectedCatalogVersion, expectedPlaybackId) :
                 SelectSource(id, expectedCatalogVersion, expectedPlaybackId);
+            if (optIn) {
+                // A synchronous Core callback may invalidate the catalog receipt
+                // after accepting the physical load. Let that presenter finish.
+                if (accepted || requestAccepted) {
+                    observeCoreLoads = true;
+                    Register();
+                } else {
+                    mirrorsOff = wasOff; observeCoreLoads = wasWatching;
+                    enabled = wasEnabled;
+                    skipUiEnableAdoption = skipUiStartAdoption = false;
+                }
+            }
+            return accepted;
         }
 
         bool MatchesCatalogSourceContext() {
@@ -181,7 +236,15 @@ namespace JLChnToZ.VRC.VVMW {
             int serial = ++catalogSelectionSerial;
             // Existing Request owns every physical command and output transition.
             // Keep the old intent/receipt if the replacement is rejected.
-            Request(physical);
+            var transportUrl = physical;
+            if (!fromAuto && autoEnabled && !failed && !core.HasLocalTransportErrorForUfc && ReceiptMatchesContext()) {
+                // Keep the spelling Auto issued. Core verifies the native load and generation
+                // before continuing it, including the interval before the first picture.
+                var current = pending && core.IsLocalTransportActiveForUfc ? selectedPhysical :
+                    core.LocalTransportLoadedPhysicalUrlForUfc;
+                if (catalog.SameSourceEndpoint(current, physical)) transportUrl = current;
+            }
+            Request(transportUrl);
             // A newer explicit choice inside a Core callback owns the intent.
             if (serial != catalogSelectionSerial) return false;
             if (!requestAccepted) { selectionResult = SourceMirrorCatalog.TransportRejected; return false; }
@@ -192,6 +255,7 @@ namespace JLChnToZ.VRC.VVMW {
                 !requestedMobile.Equals(catalog.ContextMobileCanonical)) {
                 selectionResult = SourceMirrorCatalog.PlaybackChanged; return false;
             }
+            selectionAwaitingContext = false;
             selectedSourceId = sourceId;
             selectedFilmId = requestedFilm;
             selectedPlaybackId = expectedPlaybackId;
@@ -200,6 +264,7 @@ namespace JLChnToZ.VRC.VVMW {
             selectedCanonical = requestedCanonical;
             selectedMobile = requestedMobile;
             selectedBackend = requestedBackend;
+            if (catalog.Version != expectedCatalogVersion) RebindSelectedEndpoint();
             requestedPhysical = physical;
             if (!fromAuto) StopAuto();
             selectionResult = SourceMirrorCatalog.Accepted;
