@@ -371,24 +371,30 @@ namespace JLChnToZ.VRC.VVMW {
             if (authority.FirstCatalogLaunchHint != 0) { _Refresh(); return; }
             if (!ReadyToSubmit() || VRCUrl.IsNullOrEmpty(primary)) { feedback = "Unavailable"; _Refresh(); return; }
             if (recoveryCopy != 0 && (!reviewArmed || !SubmittedFieldsUnchanged())) {
-                CaptureSubmittedFields();
+                CaptureSubmittedFields(DraftMirrors());
                 reviewArmed = true; request = feedback = ""; closeAfterSave = false;
                 _Refresh(); return;
             }
-            var first = mirrorInputs[0].GetUrl(); var second = mirrorInputs[1].GetUrl();
-            bool hasFirst = !VRCUrl.IsNullOrEmpty(first), hasSecond = !VRCUrl.IsNullOrEmpty(second);
-            int count = 1 + (hasFirst ? 1 : 0) + (hasSecond ? 1 : 0);
-            // A new mirror already has an ID from its first submission. Reuse the row IDs on an unchanged retry.
+            var mirrors = DraftMirrors();
+            int count = 1;
+            foreach (var mirror in mirrors)
+                if (!VRCUrl.IsNullOrEmpty(mirror)) count++;
+            // Keep the source IDs assigned by the first submission of this draft.
             bool repeat = !string.IsNullOrEmpty(request) && publishedIds != null && publishedIds.Length == count && SubmittedFieldsUnchanged();
-            var urls = new VRCUrl[count]; var sourceIds = repeat ? publishedIds : new string[count]; var labels = new string[count];
-            urls[0] = primary; sourceIds[0] = ids[0]; labels[0] = SourceName(0, primary);
-            int at = 1;
-            for (int i = 1; i < 3; i++) {
-                if ((i == 1 && !hasFirst) || (i == 2 && !hasSecond)) continue;
-                var url = i == 1 ? first : second;
-                urls[at] = url;
-                if (!repeat) sourceIds[at] = SourceId(url);
-                labels[at] = SourceName(i, url); at++;
+            var urls = new VRCUrl[count];
+            var sourceIds = repeat ? publishedIds : new string[count];
+            var labels = new string[count];
+            urls[0] = primary;
+            sourceIds[0] = ids[0];
+            labels[0] = SourceName(0, primary);
+            int row = 1;
+            for (int slot = 0; slot < mirrors.Length; slot++) {
+                var url = mirrors[slot];
+                if (VRCUrl.IsNullOrEmpty(url)) continue;
+                urls[row] = url;
+                labels[row] = SourceName(slot + 1, url);
+                if (!repeat) sourceIds[row] = SourceId(url);
+                row++;
             }
             // Compare the compacted rows that would actually be published. Reviewed
             // recovery and outstanding receipts still require an explicit write.
@@ -401,17 +407,23 @@ namespace JLChnToZ.VRC.VVMW {
             }
             if (KeepsSubmittedFields() || repeatedSubmission || revisedRetry) revisedRetry = revisedRetry || !repeat;
             repeatedSubmission = repeat;
-            CaptureSubmittedFields();
-            publishedIds = sourceIds; publishedLabels = labels; publishedUrls = urls;
+            CaptureSubmittedFields(mirrors);
+            publishedIds = sourceIds;
+            publishedLabels = labels;
+            publishedUrls = urls;
+            SendDraft();
+        }
+        void SendDraft() {
             reviewArmed = false;
             request = Guid.NewGuid().ToString("N"); feedback = ""; discardArmed = false; closeAfterSave = true;
             confirmedRequest = new string[FormReceiptSize];
-            if (hasFirst) confirmedRequest[FirstMirrorGeneration] = mirrorGenerations[0].ToString();
-            if (hasSecond) confirmedRequest[FirstMirrorGeneration + 1] = mirrorGenerations[1].ToString();
+            for (int slot = 0; slot < submittedMirrors.Length; slot++)
+                if (!VRCUrl.IsNullOrEmpty(submittedMirrors[slot]))
+                    confirmedRequest[FirstMirrorGeneration + slot] = mirrorGenerations[slot].ToString();
             for (int i = 0; i < 3; i++)
                 if (submittedAutomatic[i]) confirmedRequest[FirstAutomaticName + i] = submittedLabels[i];
             bool accepted = authority.RequestPublishCurrentCatalog(role, publicationBase, playback, request,
-                urls, sourceIds, labels, new[] { film, tag }, recoveryCopy != 0);
+                publishedUrls, publishedIds, publishedLabels, new[] { film, tag }, recoveryCopy != 0);
             if (accepted) authority.TrackDraftConfirmation(request, confirmedRequest, this, deliveredDraft);
             else {
                 // The authority did not admit this call, so a late receipt cannot arrive.
@@ -579,11 +591,11 @@ namespace JLChnToZ.VRC.VVMW {
         }
         string[] DraftLabels() => new[] { nameInputs[0].text, nameInputs[1].text, nameInputs[2].text };
         VRCUrl[] DraftMirrors() => new[] { mirrorInputs[0].GetUrl(), mirrorInputs[1].GetUrl() };
-        void CaptureSubmittedFields() {
+        void CaptureSubmittedFields(VRCUrl[] mirrors) {
             submittedLabels = DraftLabels();
             for (int i = 0; i < 3; i++)
                 submittedAutomatic[i] = automaticLabels[i] != null && submittedLabels[i] == automaticLabels[i];
-            submittedMirrors = DraftMirrors();
+            submittedMirrors = mirrors;
         }
         void SetValidationFeedback(string message) {
             validationFeedback = feedback = message;
