@@ -56,7 +56,7 @@ namespace JLChnToZ.VRC.VVMW {
         public VRCUrl LoadedPhysicalUrlForUfc => loadedPhysicalUrlForUfc;
         public bool HasStartedLocalTransportPictureForUfc => pictureStartedForUfc && hasTexture;
         public bool CanContinueLocalTransportLoadForUfc(int generation, VRCUrl canonicalUrl, VRCUrl physicalUrl) =>
-            isActive && !IsReady && localLoadPendingForUfc && !localLoadBlockedForUfc &&
+            isActive && localLoadPendingForUfc && !localLoadBlockedForUfc &&
             localLoadGenerationForUfc == generation && localLoadIssuedForUfc &&
             issuedLoadGenerationForUfc == generation && nativeLoadPresentForUfc && !isLoadUrlRequested &&
             !VRCUrl.IsNullOrEmpty(canonicalUrl) && !VRCUrl.IsNullOrEmpty(physicalUrl) &&

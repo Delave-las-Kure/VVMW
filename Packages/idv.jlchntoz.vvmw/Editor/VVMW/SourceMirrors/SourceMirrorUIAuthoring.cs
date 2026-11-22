@@ -98,6 +98,17 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             trigger.triggers.Add(down);
         }
 
+        public static void BindSubmitGestures(SourceMirrorUI view) {
+            var backing = UdonSharpEditorUtility.GetBackingUdonBehaviour(view);
+            Need(backing, "The source UI needs its Udon backing before wiring.");
+            for (int i = 0; i < view.sourceButtons.Length; i++)
+                SourceMirrorCatalogUIAuthoring.BindGesture(view.sourceButtons[i], backing, EventTriggerType.Submit, "_SubmitSource" + i);
+            SourceMirrorCatalogUIAuthoring.BindGesture(view.autoButton, backing, EventTriggerType.Submit, nameof(SourceMirrorUI._SubmitAuto));
+            SourceMirrorCatalogUIAuthoring.BindGesture(view.retryButton, backing, EventTriggerType.Submit, nameof(SourceMirrorUI._SubmitRetry));
+            SourceMirrorCatalogUIAuthoring.BindGesture(view.enableButton, backing, EventTriggerType.PointerDown, nameof(SourceMirrorUI._PressEnable));
+            SourceMirrorCatalogUIAuthoring.BindGesture(view.enableButton, backing, EventTriggerType.Submit, nameof(SourceMirrorUI._SubmitEnable));
+        }
+
         public static SourceMirrorUI Create(RectTransform parent, SourceMirrorController mirrors, UIHandler controls) {
             Need(controls && mirrors && controls.gameObject.scene == mirrors.gameObject.scene,
                 "Choose the existing controls in the mirror Core scene.");
@@ -188,6 +199,7 @@ namespace JLChnToZ.VRC.VVMW.Editors {
             Wire(view.retryButton, view, nameof(SourceMirrorUI._Retry), nameof(SourceMirrorUI._PressRetry));
             Wire(view.enableButton, view, nameof(SourceMirrorUI._Enable));
             for (int i = 0; i < 3; i++) Wire(view.sourceButtons[i], view, "_Source" + i, "_PressSource" + i);
+            BindSubmitGestures(view);
             popup.gameObject.SetActive(false);
             UdonSharpEditorUtility.CopyProxyToUdon(view);
             return view;

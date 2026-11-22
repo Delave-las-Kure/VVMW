@@ -608,7 +608,11 @@ namespace JLChnToZ.VRC.VVMW {
                     lastClickResyncTime = currentTime;
                 }
             }
-            ReloadUrlCore();
+            // The owner may resync before its first outgoing snapshot for this launch.
+            // PlayUrl already selected the current platform's canonical address locally.
+            bool useLocalLaunch = HasSharedPlaybackContextForUfc && Networking.IsOwner(gameObject) &&
+                SharedPlaybackMatchesLocalForUfc();
+            ReloadUrlCore(useLocalLaunch);
         }
 
         void ReloadUrlCore(bool preserveLocalUrlForUfc = false) {
@@ -894,6 +898,21 @@ namespace JLChnToZ.VRC.VVMW {
             RequestSerialization();
         }
 
+        // The room clock stays frozen during a local reload. A new owner's launch can
+        // still require its URLs and configured player in the first outgoing snapshot.
+        void CopyLocalMediaToSnapshotForUfc() {
+            activePlayer = localActivePlayer;
+#if UNITY_ANDROID || UNITY_IOS
+            if (!VRCUrl.IsNullOrEmpty(altUrl)) {
+                pcUrl = altUrl;
+                questUrl = localUrl;
+                return;
+            }
+#endif
+            pcUrl = localUrl;
+            questUrl = altUrl;
+        }
+
         /// <summary>
         /// Event entry point when the video player is about to synchronize.
         /// Internal use, do not invoke this.
@@ -901,18 +920,17 @@ namespace JLChnToZ.VRC.VVMW {
         public override void OnPreSerialization() {
             if (!synced) return;
             lastHealthCheckTime = Networking.GetServerTimeInSeconds();
-            if (isLocalReloading && !localTransportActiveForUfc) return;
+            if (isLocalReloading && !localTransportActiveForUfc) {
+                if (HasSharedPlaybackContextForUfc && SharedPlaybackMatchesLocalForUfc())
+                    CopyLocalMediaToSnapshotForUfc();
+                return;
+            }
             lastSyncNetworkTime = Networking.GetNetworkDateTime();
             ownerNetworkTime = Networking.GetServerTimeInMilliseconds();
             syncedSpeed = speed;
             if (localTransportActiveForUfc || (localTransportPresentationPendingForUfc && state != LOADING)) {
                 // Preserve the established room anchor until final output acknowledgement.
-                activePlayer = localActivePlayer;
-#if UNITY_ANDROID || UNITY_IOS
-                if (!VRCUrl.IsNullOrEmpty(altUrl)) { pcUrl = altUrl; questUrl = localUrl; }
-                else
-#endif
-                { pcUrl = localUrl; questUrl = altUrl; }
+                CopyLocalMediaToSnapshotForUfc();
                 syncedActualSpeed = actualSpeed;
                 rangeLoopStart = localRangeLoopStartMs;
                 rangeLoopEnd = localRangeLoopEndMs;
@@ -926,17 +944,7 @@ namespace JLChnToZ.VRC.VVMW {
                 pcUrl = null;
                 questUrl = null;
             } else {
-                activePlayer = localActivePlayer;
-#if UNITY_ANDROID || UNITY_IOS
-                if (!VRCUrl.IsNullOrEmpty(altUrl)) {
-                    pcUrl = altUrl;
-                    questUrl = localUrl;
-                } else
-#endif
-                {
-                    pcUrl = localUrl;
-                    questUrl = altUrl;
-                }
+                CopyLocalMediaToSnapshotForUfc();
                 if (activeHandler.IsReady) {
                     state = activeHandler.IsPlaying ? PLAYING : PAUSED;
                     time = (int)(CalcSyncTime(out actualSpeed) * 1000);
